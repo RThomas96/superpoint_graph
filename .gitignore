@@ -4,6 +4,7 @@
 *.so
 partition/ply_c/build
 partition/ply_c
+partition/cut-pursuit
 .mypy_cache
 vKITTI3D.md
 tags
