@@ -309,6 +309,48 @@ def main():
 
         return meter_value(acc_meter), confusion_matrix.get_overall_accuracy(), confusion_matrix.get_average_intersection_union(), per_class_iou, predictions,  confusion_matrix.get_mean_class_accuracy(), confusion_matrix.confusion_matrix
 
+
+    def eval_only_predictions():
+        """ Evaluated model on test set in an extended way: computes estimates over multiple samples of point clouds and stores predictions """
+        model.eval()
+
+        acc_meter = tnt.meter.ClassErrorMeter(accuracy=True)
+        confusion_matrix = metrics.ConfusionMatrix(dbinfo['classes'])
+        collected, predictions = defaultdict(list), {}
+
+        # collect predictions over multiple sampling seeds
+        for ss in range(args.test_multisamp_n):
+            test_dataset_ss = create_dataset(args, ss)[1]
+            loader = torch.utils.data.DataLoader(test_dataset_ss, batch_size=1, collate_fn=spg.eccpc_collate, num_workers=args.nworkers)
+            if logging.getLogger().getEffectiveLevel() > logging.DEBUG: loader = tqdm(loader, ncols=65)
+
+            # iterate over dataset in batches
+            for bidx, (targets, GIs, clouds_data) in enumerate(loader):
+                model.ecc.set_info(GIs, args.cuda)
+                label_mode_cpu, label_vec_cpu, segm_size_cpu = targets[:,0], targets[:,2:], targets[:,1:].sum(1).float()
+
+                embeddings = ptnCloudEmbedder.run(model, *clouds_data)
+                outputs = model.ecc(embeddings)
+
+                fname = clouds_data[0][0][:clouds_data[0][0].rfind('.')]
+                collected[fname].append((outputs.data.cpu().numpy(), label_mode_cpu.numpy(), label_vec_cpu.numpy()))
+
+        # aggregate predictions (mean)
+        for fname, lst in collected.items():
+            o_cpu, t_cpu, tvec_cpu = list(zip(*lst))
+            if args.test_multisamp_n > 1:
+                o_cpu = np.mean(np.stack(o_cpu,0),0)
+            else:
+                o_cpu = o_cpu[0]
+            t_cpu, tvec_cpu = t_cpu[0], tvec_cpu[0]
+            predictions[fname] = np.argmax(o_cpu,1)
+            o_cpu, t_cpu, tvec_cpu = filter_valid(o_cpu, t_cpu, tvec_cpu)
+            if t_cpu.size > 0:
+                acc_meter.add(o_cpu, t_cpu)
+
+        return predictions 
+
+
     ############
     # Training loop
     try:
@@ -377,14 +419,21 @@ def main():
     
     # Final evaluation
     if args.test_multisamp_n>0 and 'test' in args.db_test_name:
-        acc_test, oacc_test, avg_iou_test, per_class_iou_test, predictions_test, avg_acc_test, confusion_matrix = eval_final()
-        print('-> Multisample {}: Test accuracy: {}, \tTest oAcc: {}, \tTest avgIoU: {}, \tTest mAcc: {}'.format(args.test_multisamp_n, acc_test, oacc_test, avg_iou_test, avg_acc_test))
+        predictions_test = eval_only_predictions()
+        print("Save predictions...")
         with h5py.File(os.path.join(args.odir, 'predictions_'+args.db_test_name+'.h5'), 'w') as hf:
             for fname, o_cpu in predictions_test.items():
                 hf.create_dataset(name=fname, data=o_cpu) #(0-based classes)
-        with open(os.path.join(args.odir, 'scores_'+args.db_test_name+'.json'), 'w') as outfile:
-            json.dump([{'epoch': args.start_epoch, 'acc_test': acc_test, 'oacc_test': oacc_test, 'avg_iou_test': avg_iou_test, 'per_class_iou_test': per_class_iou_test, 'avg_acc_test': avg_acc_test}], outfile)
-        np.save(os.path.join(args.odir, 'pointwise_cm.npy'), confusion_matrix)
+
+    #if args.test_multisamp_n>0 and 'test' in args.db_test_name:
+    #    acc_test, oacc_test, avg_iou_test, per_class_iou_test, predictions_test, avg_acc_test, confusion_matrix = eval_final()
+    #    print('-> Multisample {}: Test accuracy: {}, \tTest oAcc: {}, \tTest avgIoU: {}, \tTest mAcc: {}'.format(args.test_multisamp_n, acc_test, oacc_test, avg_iou_test, avg_acc_test))
+    #    with h5py.File(os.path.join(args.odir, 'predictions_'+args.db_test_name+'.h5'), 'w') as hf:
+    #        for fname, o_cpu in predictions_test.items():
+    #            hf.create_dataset(name=fname, data=o_cpu) #(0-based classes)
+    #    with open(os.path.join(args.odir, 'scores_'+args.db_test_name+'.json'), 'w') as outfile:
+    #        json.dump([{'epoch': args.start_epoch, 'acc_test': acc_test, 'oacc_test': oacc_test, 'avg_iou_test': avg_iou_test, 'per_class_iou_test': per_class_iou_test, 'avg_acc_test': avg_acc_test}], outfile)
+    #    np.save(os.path.join(args.odir, 'pointwise_cm.npy'), confusion_matrix)
 
 def resume(args, dbinfo):
     """ Loads model and optimizer state from a previous checkpoint. """

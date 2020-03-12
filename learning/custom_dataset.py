@@ -111,7 +111,6 @@ def preprocess_pointclouds(SEMA3D_PATH):
                 #i.e. ~0 for roads and ~0.2-0.3 for builings for sema3d
                 # and -0.5 for floor and 0.5 for ceiling for s3dis
                 
-
                 # elpsv[:,0] /= 100 # (rough guess) #adapt 
                 # elpsv[:,1:] -= 0.5
                 # rgb = rgb/255.0 - 0.5
