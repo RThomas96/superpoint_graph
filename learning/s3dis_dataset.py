@@ -95,20 +95,20 @@ def preprocess_pointclouds(args):
     S3DIS_PATH = args.S3DIS_PATH
     class_count = np.zeros((13,6),dtype='int')
     for n in range(1,7):
-        pathP = '{}/parsed/Area_{:d}/'.format(S3DIS_PATH, n)
+        pathParsed = '{}/parsed/Area_{:d}/'.format(S3DIS_PATH, n)
         if args.supervized_partition:
-            pathD = '{}/features_supervision/Area_{:d}/'.format(S3DIS_PATH, n)
+            pathFeature = '{}/features_supervision/Area_{:d}/'.format(S3DIS_PATH, n)
         else:
-            pathD = '{}/features/Area_{:d}/'.format(S3DIS_PATH, n)
-        pathC = '{}/superpoint_graphs/Area_{:d}/'.format(S3DIS_PATH, n)
-        if not os.path.exists(pathP):
-            os.makedirs(pathP)
+            pathFeature = '{}/features/Area_{:d}/'.format(S3DIS_PATH, n)
+        pathGraph = '{}/superpoint_graphs/Area_{:d}/'.format(S3DIS_PATH, n)
+        if not os.path.exists(pathParsed):
+            os.makedirs(pathParsed)
         random.seed(n)
         
-        for file in os.listdir(pathC):
+        for file in os.listdir(pathGraph):
             print(file)
             if file.endswith(".h5"):
-                f = h5py.File(pathD + file, 'r')
+                f = h5py.File(pathFeature + file, 'r')
                 xyz = f['xyz'][:]
                 rgb = f['rgb'][:].astype(np.float)
 
@@ -145,10 +145,10 @@ def preprocess_pointclouds(args):
 
                 P = np.concatenate([xyz, rgb, e[:,np.newaxis], lpsv, xyzn, distance_to_center[:,None]], axis=1)
 
-                f = h5py.File(pathC + file, 'r')
+                f = h5py.File(pathGraph + file, 'r')
                 numc = len(f['components'].keys())
 
-                with h5py.File(pathP + file, 'w') as hf:
+                with h5py.File(pathParsed + file, 'w') as hf:
                     hf.create_dataset(name='centroid',data=xyz.mean(0))
                     for c in range(numc):
                         idx = f['components/{:d}'.format(c)][:].flatten()
