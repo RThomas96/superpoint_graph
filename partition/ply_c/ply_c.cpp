@@ -287,9 +287,9 @@ class AttributeGrid {
 
 PyObject *  prune(const bpn::ndarray & xyz ,float voxel_size, const bpn::ndarray & rgb, const bpn::ndarray & labels, const bpn::ndarray & objects, const int n_labels, const int n_objects)
 {//prune the point cloud xyz with a regular voxel grid
-    std::cout << "=========================" << std::endl;
-    std::cout << "======== pruning ========" << std::endl;
-    std::cout << "=========================" << std::endl;
+    //std::cout << "=========================" << std::endl;
+    //std::cout << "======= Reduction =======" << std::endl;
+    //std::cout << "=========================" << std::endl;
     uint64_t n_ver = bp::len(xyz);
     bool have_labels = n_labels>0;
     bool have_objects = n_objects>0;
@@ -302,6 +302,7 @@ PyObject *  prune(const bpn::ndarray & xyz ,float voxel_size, const bpn::ndarray
     const uint32_t * object_data;
     if (have_objects)
         object_data = reinterpret_cast<uint32_t*>(objects.get_data());
+    // :std::cout << "Start voxelisation" << std::endl;
     //---find min max of xyz----
     float x_max = std::numeric_limits<float>::lowest(), x_min = std::numeric_limits<float>::max();
     float y_max = std::numeric_limits<float>::lowest(), y_min = std::numeric_limits<float>::max();
