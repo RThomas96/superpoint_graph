@@ -143,7 +143,7 @@ for folder in pathManager.folders:
             start = time.perf_counter()
 
             #---compute 10 nn graph-------
-            print(tab + "Compute 10_nn graph...")
+            print(tab + "Compute both {}_nn and {}_nn graphs...".format(args.knn_adj, args.knn_geofeatures))
             graph_nn, target_fea = graphs.compute_graph_nn_2(xyz, args.knn_adj, args.knn_geofeatures)
 
             #---compute geometric features-------
@@ -172,6 +172,8 @@ for folder in pathManager.folders:
             # increase the importance of verticality (heuristic)
             # geof[:,3] = 2. * geof[:, 3]                 
 
+            # Add an edge weight proportionnal to distance
+            # Weight= 1/dist+meanDist
             graph_nn["edge_weight"] = np.array(1. / ( args.lambda_edge_weight + graph_nn["distances"] / np.mean(graph_nn["distances"])), dtype = 'float32')
 
             # Compute optimisation solution with cut pursuit
