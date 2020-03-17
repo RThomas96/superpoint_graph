@@ -4,6 +4,7 @@
     2017 Loic Landrieu, Martin Simonovsky
     Script for partioning into simples shapes
 """
+import random
 import os.path
 import shutil
 import sys
@@ -18,12 +19,79 @@ import libply_c
 from datetime import datetime
 import time
 from glob import glob
+import h5py
+from sklearn.linear_model import RANSACRegressor
 
 import libcp
 import graphs
 import provider
 # from graphs import *
 # from provider import *
+
+def parseCloudForPointNET(featureFile, graphFile, parseFile, isTrainFolder):
+    """ Preprocesses data by splitting them by components and normalizing."""
+
+    ####################
+    # Computation of all the features usefull for local descriptors computation made by PointNET
+    ####################
+    # This file is geometric features computed to SuperPoint construction
+    # There are still usefull for local descriptors computation 
+    geometricFeatureFile = h5py.File(featureFile, 'r')
+    xyz = geometricFeatureFile['xyz'][:]
+    rgb = geometricFeatureFile['rgb'][:].astype(np.float)
+    rgb = rgb/255.0 - 0.5
+    # elpsv = np.stack([ featureFile['xyz'][:,2][:], featureFile['linearity'][:], featureFile['planarity'][:], featureFile['scattering'][:], featureFile['verticality'][:] ], axis=1)
+    lpsv = geometricFeatureFile['geof'][:] 
+    lpsv -= 0.5 #normalize
+
+    # Compute elevation with simple Ransac from low points
+    if isTrainFolder:
+        e = xyz[:,2] / 4 - 0.5 # (4m rough guess)
+    else :
+        low_points = ((xyz[:,2]-xyz[:,2].min() < 0.5)).nonzero()[0]
+        try:
+            reg = RANSACRegressor(random_state=0).fit(xyz[low_points,:2], xyz[low_points,2])
+            e = xyz[:,2]-reg.predict(xyz[:,:2])
+            e /= np.max(np.abs(e),axis=0)
+            e *= 0.5
+        except ValueError as error:
+            print ("ERROR ransac regressor: " + error) 
+            e = xyz[:,2] / 4 - 0.5 # (4m rough guess)
+
+    # rescale to [-0.5,0.5]; keep xyz
+    #warning - to use the trained model, make sure the elevation is comparable
+    #to the set they were trained on
+    #i.e. ~0 for roads and ~0.2-0.3 for builings for sema3d
+    # and -0.5 for floor and 0.5 for ceiling for s3dis
+
+    # elpsv[:,0] /= 100 # (rough guess) #adapt 
+    # elpsv[:,1:] -= 0.5
+    # rgb = rgb/255.0 - 0.5
+
+    # Add some new features, why not ?
+    room_center = xyz[:,[0,1]].mean(0) #compute distance to room center, useful to detect walls and doors
+    distance_to_center = np.sqrt(((xyz[:,[0,1]]-room_center)**2).sum(1))
+    distance_to_center = (distance_to_center - distance_to_center.mean())/distance_to_center.std()
+    ma, mi = np.max(xyz,axis=0,keepdims=True), np.min(xyz,axis=0,keepdims=True)
+    xyzn = (xyz - mi) / (ma - mi + 1e-8)   # as in PointNet ("normalized location as to the room (from 0 to 1)")
+
+    # Concatenante data so that each line have this format
+    parsedData = np.concatenate([xyz, rgb, e[:,np.newaxis], lpsv, xyzn, distance_to_center[:,None]], axis=1)
+
+    # Old features
+    # parsedData = np.concatenate([xyz, rgb, elpsv], axis=1)
+
+    graphFile = h5py.File(graphFile, 'r')
+    nbComponents = len(graphFile['components'].keys())
+
+    with h5py.File(parseFile, 'w') as parsedFile:
+        for components in range(nbComponents):
+            idx = graphFile['components/{:d}'.format(components)][:].flatten()
+            if idx.size > 10000: # trim extra large segments, just for speed-up of loading time
+                ii = random.sample(range(idx.size), k=10000)
+                idx = idx[ii]
+            # For all points in the superpoint ( the set of index "idx"), get all correspondant parsed data and add it to the file
+            parsedFile.create_dataset(name='{:d}'.format(components), data=parsedData[idx,...])
 
 def readFile(file, type):
     if type == "s3dis":
@@ -61,7 +129,6 @@ class PathManager :
     def __init__(self, args, dataType="ply"):
         self.rootPath = os.path.dirname(os.path.realpath(__file__)) + '/../' + args.ROOT_PATH
         self.folders = ["test", "train"]
-        self.subfolders = ["features", "superpoint_graph", "data"]
 
         self.allDataFileName = {}
         for folder in self.folders:
@@ -116,6 +183,11 @@ for folder in pathManager.folders:
 
         featureFile  = pathManager.rootPath + "/features/" + folder + "/" + fileName + ".h5" 
         spgFile  = pathManager.rootPath + "/superpoint_graphs/" + folder + "/" + fileName + ".h5" 
+        parseFile  = pathManager.rootPath + "/parsed/" + folder + "/" + fileName + ".h5"
+
+        for sub in ["/features", "/superpoint_graphs", "/parsed"] : 
+            for subsub in ["/test", "/train"] : 
+                if not os.path.isdir(pathManager.rootPath + sub + subsub): os.mkdir(pathManager.rootPath + sub + subsub)
         
         print(str(i + 1) + " / " + str(len(pathManager.allDataFileName[folder])) + "---> "+fileName)
         tab="   "
@@ -193,6 +265,11 @@ for folder in pathManager.folders:
 
             provider.write_spg(spgFile, graph_sp, components, in_component)
         
+        if os.path.isfile(parseFile) and not args.overwrite :
+            print(tab + "Reading the existing parsed file...")
+        else:
+            parseCloudForPointNET(featureFile, spgFile, parseFile, folderTrain)
+
         # print("Timer : {:0.4f} s / {:0.4f} s / {:0.4f} s ".format(times[0], times[1], times[2]))
         print(f"Timer : {times[0]:0.4f} s loading files / {times[1]:0.4f} s features / {times[2]:0.4f} s superpoints / {times[3]:0.4f} s graph")
         times=[0., 0., 0., 0.]
