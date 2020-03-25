@@ -161,7 +161,8 @@ def compute_sp_graph(xyz, d_max, in_component, components, labels, n_labels):
         if has_labels and label_hist:
             graph["sp_labels"][i_com, :] = sum(labels[comp,:])
         graph["sp_point_count"][i_com] = len(comp)
-        xyz_sp = np.unique(xyz[comp.astype('uint32'), :], axis=0)
+        #xyz_sp = np.unique(xyz[comp.astype('uint32'), :], axis=0)
+        xyz_sp = np.unique(xyz[comp, :], axis=0)
         if len(xyz_sp) == 1:
             graph["sp_centroids"][i_com] = xyz_sp
             graph["sp_length"][i_com] = 0

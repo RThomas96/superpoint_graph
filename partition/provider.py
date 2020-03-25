@@ -564,7 +564,8 @@ def write_spg(file_name, graph_sp, components, in_component):
     grp = data_file.create_group('components')
     n_com = len(components)
     for i_com in range(0, n_com):
-        grp.create_dataset(str(i_com), data=components[i_com].astype('uint32'), dtype='uint32')
+        grp.create_dataset(str(i_com), data=components[i_com], dtype='uint32')
+        #grp.create_dataset(str(i_com), data=components[i_com].astype('uint32'), dtype='uint32')
     data_file.create_dataset('in_component'
                              , data=in_component, dtype='uint32')
     data_file.create_dataset('sp_labels'
