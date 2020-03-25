@@ -149,6 +149,7 @@ class CloudEmbedder():
         idx_valid = torch.nonzero(clouds_flag.eq(0)).squeeze()
         if self.args.cuda:
             clouds, clouds_global, idx_valid = clouds.cuda(), clouds_global.cuda(), idx_valid.cuda()
+        # Variable allow to wrap a tensor, and indicate that model isn't training
         clouds, clouds_global = Variable(clouds, volatile=not model.training), Variable(clouds_global, volatile=not model.training)
         #print('Ptn with', clouds.size(0), 'clouds')
 

@@ -27,6 +27,7 @@ def compute_graph_nn_2(xyz, k_nn1, k_nn2, voronoi = 0.0):
     """compute simulteneoulsy 2 knn structures
     only saves target for knn2
     assumption : knn1 <= knn2"""
+    "knn2 = geoFeature knn and knn1 = optimisation knn"
     assert k_nn1 <= k_nn2, "knn1 must be smaller than knn2"
     n_ver = xyz.shape[0]
     #compute nearest neighbors
@@ -88,21 +89,27 @@ def compute_sp_graph(xyz, d_max, in_component, components, labels, n_labels):
     interface = in_component[tri.vertices[:, 0]] != in_component[tri.vertices[:, 1]]
     edg1 = np.vstack((tri.vertices[interface, 0], tri.vertices[interface, 1]))
     edg1r = np.vstack((tri.vertices[interface, 1], tri.vertices[interface, 0]))
+
     interface = in_component[tri.vertices[:, 0]] != in_component[tri.vertices[:, 2]]
     edg2 = np.vstack((tri.vertices[interface, 0], tri.vertices[interface, 2]))
     edg2r = np.vstack((tri.vertices[interface, 2], tri.vertices[interface, 0]))
+
     interface = in_component[tri.vertices[:, 0]] != in_component[tri.vertices[:, 3]]
     edg3 = np.vstack((tri.vertices[interface, 0], tri.vertices[interface, 3]))
     edg3r = np.vstack((tri.vertices[interface, 3], tri.vertices[interface, 0]))
+
     interface = in_component[tri.vertices[:, 1]] != in_component[tri.vertices[:, 2]]
     edg4 = np.vstack((tri.vertices[interface, 1], tri.vertices[interface, 2]))
     edg4r = np.vstack((tri.vertices[interface, 2], tri.vertices[interface, 1]))
+
     interface = in_component[tri.vertices[:, 1]] != in_component[tri.vertices[:, 3]]
     edg5 = np.vstack((tri.vertices[interface, 1], tri.vertices[interface, 3]))
     edg5r = np.vstack((tri.vertices[interface, 3], tri.vertices[interface, 1]))
+
     interface = in_component[tri.vertices[:, 2]] != in_component[tri.vertices[:, 3]]
     edg6 = np.vstack((tri.vertices[interface, 2], tri.vertices[interface, 3]))
     edg6r = np.vstack((tri.vertices[interface, 3], tri.vertices[interface, 2]))
+
     del tri, interface
     edges = np.hstack((edg1, edg2, edg3, edg4 ,edg5, edg6, edg1r, edg2r,
                        edg3r, edg4r ,edg5r, edg6r))

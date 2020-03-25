@@ -66,6 +66,7 @@ Related file: ply\_c.cpp, compute\_geof, l. 385
 
 ### Superpoint graph computation
 
+* TODO: Use voronoi to compute superpoints adjacency
 * Compute 4 features for each superpoints: 
 	* centroid: mean(xyz) 
 	* length: sqrt(sum(xyz))

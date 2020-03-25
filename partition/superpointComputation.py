@@ -1,8 +1,8 @@
 """
     Large-scale Point Cloud Semantic Segmentation with Superpoint Graphs
-    http://arxiv.org/abs/1711.09869
-    2017 Loic Landrieu, Martin Simonovsky
-    Script for partioning into simples shapes
+    Original verion: 2017 Loic Landrieu, Martin Simonovsky
+    Current version: 2020 Richard Thomas
+    Script for partioning into simples shapes and prepare data
 """
 import random
 import os.path
@@ -72,6 +72,7 @@ def parseCloudForPointNET(featureFile, graphFile, parseFile, isTrainFolder):
     room_center = xyz[:,[0,1]].mean(0) #compute distance to room center, useful to detect walls and doors
     distance_to_center = np.sqrt(((xyz[:,[0,1]]-room_center)**2).sum(1))
     distance_to_center = (distance_to_center - distance_to_center.mean())/distance_to_center.std()
+
     ma, mi = np.max(xyz,axis=0,keepdims=True), np.min(xyz,axis=0,keepdims=True)
     xyzn = (xyz - mi) / (ma - mi + 1e-8)   # as in PointNet ("normalized location as to the room (from 0 to 1)")
 

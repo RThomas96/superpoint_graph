@@ -468,8 +468,10 @@ def create_model(args, dbinfo):
     model = nn.Module()
 
     nfeat = args.ptn_widths[1][-1]
+    # ecc = edge convolutionnal layer
     model.ecc = graphnet.GraphNetwork(args.model_config, nfeat, [dbinfo['edge_feats']] + args.fnet_widths, args.fnet_orthoinit, args.fnet_llbias,args.fnet_bnidx, args.edge_mem_limit, use_pyg = args.use_pyg, cuda = args.cuda)
 
+    # ptn = point net
     model.ptn = pointnet.PointNet(args.ptn_widths[0], args.ptn_widths[1], args.ptn_widths_stn[0], args.ptn_widths_stn[1], dbinfo['node_feats'], args.ptn_nfeat_stn, prelast_do=args.ptn_prelast_do)
 
     print('Total number of parameters: {}'.format(sum([p.numel() for p in model.parameters()])))
