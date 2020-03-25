@@ -134,14 +134,20 @@ class PathManager :
         self.allDataFileName = {}
         for folder in self.folders:
             dataPath = self.rootPath + "/data/" + folder
-            try:
-                allDataFiles = glob(dataPath + "/*."+ dataType)
-            except OSError:
-                print("{} do not exist ! It is needed and contain input point clouds.".format(dataPath))
             self.allDataFileName[folder] = []
-            for dataFile in allDataFiles:
-                dataName = os.path.splitext(os.path.basename(dataFile))[0]
-                self.allDataFileName[folder].append(dataName)
+            if folder == "train":
+                    # subDir = [x[0] for x in os.walk(dataPath)]
+                    for subDir in os.listdir(dataPath) :
+                        print(subDir)
+                        self.allDataFileName[folder].append(subDir)
+            else:
+                try:
+                    allDataFiles = glob(dataPath + "/*."+ dataType)
+                except OSError:
+                    print("{} do not exist ! It is needed and contain input point clouds.".format(dataPath))
+                for dataFile in allDataFiles:
+                    dataName = os.path.splitext(os.path.basename(dataFile))[0]
+                    self.allDataFileName[folder].append(dataName)
             if len(self.allDataFileName[folder]) <= 0:
                 print("Warning: {} folder is empty or do not contain {} format file".format(folder, dataType))
                 #raise FileNotFoundError("Data folder is empty or do not contain {} format files".format(dataType))
