@@ -96,19 +96,19 @@ def parseCloudForPointNET(featureFile, graphFile, parseFile, isTrainFolder):
 
 def readFile(file, type):
     if type == "s3dis":
-        xyz, rgb, labels, objects = provider.read_s3dis_format(file)
+        return provider.read_s3dis_format(file)
     else :
-        xyz, rgb = provider.read_ply(file)
-        labels=[]
-        objects=[]
-    return xyz, rgb, labels, objects
+        return provider.read_ply(file)
 
 def reduceDensity(xyz, voxel_width, rgb, labels, n_labels):
-    if n_labels > 0:
-        xyz, rgb, labels, dump = libply_c.prune(xyz.astype('f4'), args.voxel_width, rgb.astype('uint8'), labels.astype('uint8'), np.zeros(1, dtype='uint8'), n_labels, 0)
-    else:
-        xyz, rgb, labels, dump = libply_c.prune(xyz.astype('f4'), args.voxel_width, rgb.astype('uint8'), np.zeros(1, dtype='uint8'), np.zeros(1, dtype='uint8'), 0, 0)
-        labels = []
+    asNoLabel = False
+    if len(labels) == 0:
+        asNoLabel = True
+        labels = np.array([]) 
+        n_labels = 0
+    xyz, rgb, labels, dump = libply_c.prune(xyz, args.voxel_width, rgb, labels, np.zeros(1, dtype='uint8'), n_labels, 0)
+    if asNoLabel:
+        labels = np.array([]) 
     return xyz, rgb, labels
 
 def storePreviousFile(fileFullName):
@@ -129,14 +129,20 @@ def addRGBToFeature(features, rgb):
 class PathManager : 
     def __init__(self, args, dataType="ply"):
         self.rootPath = os.path.dirname(os.path.realpath(__file__)) + '/../' + args.ROOT_PATH
+        if not os.path.isdir(self.rootPath):
+            raise NameError('The root subfolder you indicate doesn\'t exist')
+
+        dataFolder = self.rootPath + "/data/"
+        if not os.path.isdir(self.rootPath):
+            raise NameError('The data folder doesn\'t exist or is empty')
+
         self.folders = ["test", "train"]
 
         self.allDataFileName = {}
         for folder in self.folders:
-            dataPath = self.rootPath + "/data/" + folder
+            dataPath = dataFolder + folder
             self.allDataFileName[folder] = []
             if folder == "train":
-                    # subDir = [x[0] for x in os.walk(dataPath)]
                     for subDir in os.listdir(dataPath) :
                         print(subDir)
                         self.allDataFileName[folder].append(subDir)
@@ -192,9 +198,14 @@ for folder in pathManager.folders:
         spgFile  = pathManager.rootPath + "/superpoint_graphs/" + folder + "/" + fileName + ".h5" 
         parseFile  = pathManager.rootPath + "/parsed/" + folder + "/" + fileName + ".h5"
 
-        for sub in ["/features", "/superpoint_graphs", "/parsed"] : 
+        voxelisedFile  = pathManager.rootPath + "/voxelised/" + folder + "/" + fileName + "/" + fileName + "-prunned" + str(args.voxel_width).replace(".", "-") + ".h5"
+
+        for sub in ["/features", "/superpoint_graphs", "/parsed", "/voxelised"] : 
             for subsub in ["/test", "/train"] : 
+                if not os.path.isdir(pathManager.rootPath + sub): os.mkdir(pathManager.rootPath + sub)
                 if not os.path.isdir(pathManager.rootPath + sub + subsub): os.mkdir(pathManager.rootPath + sub + subsub)
+
+        if not os.path.isdir(pathManager.rootPath + "/voxelised/" + folder + "/" + fileName): os.mkdir(pathManager.rootPath + "/voxelised/" + folder + "/" + fileName)
         
         print(str(i + 1) + " / " + str(len(pathManager.allDataFileName[folder])) + "---> "+fileName)
         tab="   "
@@ -206,18 +217,28 @@ for folder in pathManager.folders:
         else :
             storePreviousFile(featureFile)
 
-            start = time.perf_counter()
-
-            print(tab + "Read {}".format(fileName))
             readType = "s3dis" if folderTrain else "custom"
-            xyz, rgb, labels, objects = readFile(dataFile, readType)
+            start = time.perf_counter()
+            if os.path.isfile(voxelisedFile):
+                print("Voxelised file found, voxelisation step skipped")
+                print("Read voxelised file")
+                xyz, rgb, labels, objects = readFile(voxelisedFile, readType)
+            else :
+                print(tab + "Read {}".format(fileName))
+                xyz, rgb, labels, objects = readFile(dataFile, readType)
 
-            end = time.perf_counter()
-            times[0] = times[0] + end - start
-            #---Voxelise to reduce density-------
-            print(tab + "Reduce point density")
-            if args.voxel_width > 0:
-                xyz, rgb, labels = reduceDensity(xyz, args.voxel_width, rgb, labels, n_labels)
+                end = time.perf_counter()
+                times[0] = times[0] + end - start
+                #---Voxelise to reduce density-------
+                print(tab + "Reduce point density")
+                if args.voxel_width > 0:
+                    xyz, rgb, labels = reduceDensity(xyz, args.voxel_width, rgb, labels, n_labels)
+
+                print(tab + "Save reduced density")
+                if len(labels) > 0:
+                    provider.write_ply_labels(voxelisedFile, xyz, rgb, labels)
+                else :
+                    provider.write_ply(voxelisedFile, xyz, rgb)
 
             start = time.perf_counter()
 

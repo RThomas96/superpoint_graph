@@ -402,9 +402,9 @@ def read_ply(filename):
     except ValueError:
         try:
             labels = plydata['vertex']['label']
-            return xyz, rgb, labels
+            return xyz, rgb, labels, []
         except ValueError:
-            return xyz, rgb
+            return xyz, rgb, [], []
 #------------------------------------------------------------------------------
 def read_las(filename):
     """convert from a las file with no rgb"""
