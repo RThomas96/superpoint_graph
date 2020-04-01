@@ -15,12 +15,15 @@ from timeit import default_timer as timer
 sys.path.append("./partition/cut-pursuit/build/src")
 sys.path.append("./partition/ply_c")
 sys.path.append("./partition")
+sys.path.append("./utils")
 import libply_c
 from datetime import datetime
 import time
-from glob import glob
 import h5py
 from sklearn.linear_model import RANSACRegressor
+
+from colorLabelManager import ColorLabelManager
+from pathManager import PathManager
 
 import libcp
 import graphs
@@ -28,7 +31,13 @@ import provider
 # from graphs import *
 # from provider import *
 
-def parseCloudForPointNET(featureFile, graphFile, parseFile, isTrainFolder):
+def write_ply(file, xyz, rgb, labels):
+    if len(labels) > 0:
+        provider.write_ply_labels(file, xyz, rgb, labels)
+    else :
+        provider.write_ply(file, xyz, rgb)
+
+def parseCloudForPointNET(featureFile, graphFile, parseFile):
     """ Preprocesses data by splitting them by components and normalizing."""
 
     ####################
@@ -45,18 +54,18 @@ def parseCloudForPointNET(featureFile, graphFile, parseFile, isTrainFolder):
     lpsv -= 0.5 #normalize
 
     # Compute elevation with simple Ransac from low points
-    if isTrainFolder:
+    #if isTrainFolder:
+    #    e = xyz[:,2] / 4 - 0.5 # (4m rough guess)
+    #else :
+    low_points = ((xyz[:,2]-xyz[:,2].min() < 0.5)).nonzero()[0]
+    try:
+        reg = RANSACRegressor(random_state=0).fit(xyz[low_points,:2], xyz[low_points,2])
+        e = xyz[:,2]-reg.predict(xyz[:,:2])
+        e /= np.max(np.abs(e),axis=0)
+        e *= 0.5
+    except ValueError as error:
+        print ("ERROR ransac regressor: " + error) 
         e = xyz[:,2] / 4 - 0.5 # (4m rough guess)
-    else :
-        low_points = ((xyz[:,2]-xyz[:,2].min() < 0.5)).nonzero()[0]
-        try:
-            reg = RANSACRegressor(random_state=0).fit(xyz[low_points,:2], xyz[low_points,2])
-            e = xyz[:,2]-reg.predict(xyz[:,:2])
-            e /= np.max(np.abs(e),axis=0)
-            e *= 0.5
-        except ValueError as error:
-            print ("ERROR ransac regressor: " + error) 
-            e = xyz[:,2] / 4 - 0.5 # (4m rough guess)
 
     # rescale to [-0.5,0.5]; keep xyz
     #warning - to use the trained model, make sure the elevation is comparable
@@ -94,12 +103,6 @@ def parseCloudForPointNET(featureFile, graphFile, parseFile, isTrainFolder):
             # For all points in the superpoint ( the set of index "idx"), get all correspondant parsed data and add it to the file
             parsedFile.create_dataset(name='{:d}'.format(components), data=parsedData[idx,...])
 
-def readFile(file, type):
-    if type == "s3dis":
-        return provider.read_s3dis_format(file)
-    else :
-        return provider.read_ply(file)
-
 def reduceDensity(xyz, voxel_width, rgb, labels, n_labels):
     asNoLabel = False
     if len(labels) == 0:
@@ -126,38 +129,6 @@ def storePreviousFile(fileFullName):
 def addRGBToFeature(features, rgb):
     return np.hstack((features, rgb/255.)).astype('float32')#add rgb as a feature for partitioning
 
-class PathManager : 
-    def __init__(self, args, dataType="ply"):
-        self.rootPath = os.path.dirname(os.path.realpath(__file__)) + '/../' + args.ROOT_PATH
-        if not os.path.isdir(self.rootPath):
-            raise NameError('The root subfolder you indicate doesn\'t exist')
-
-        dataFolder = self.rootPath + "/data/"
-        if not os.path.isdir(self.rootPath):
-            raise NameError('The data folder doesn\'t exist or is empty')
-
-        self.folders = ["test", "train"]
-
-        self.allDataFileName = {}
-        for folder in self.folders:
-            dataPath = dataFolder + folder
-            self.allDataFileName[folder] = []
-            if folder == "train":
-                    for subDir in os.listdir(dataPath) :
-                        print(subDir)
-                        self.allDataFileName[folder].append(subDir)
-            else:
-                try:
-                    allDataFiles = glob(dataPath + "/*."+ dataType)
-                except OSError:
-                    print("{} do not exist ! It is needed and contain input point clouds.".format(dataPath))
-                for dataFile in allDataFiles:
-                    dataName = os.path.splitext(os.path.basename(dataFile))[0]
-                    self.allDataFileName[folder].append(dataName)
-            if len(self.allDataFileName[folder]) <= 0:
-                print("Warning: {} folder is empty or do not contain {} format file".format(folder, dataType))
-                #raise FileNotFoundError("Data folder is empty or do not contain {} format files".format(dataType))
-
 parser = argparse.ArgumentParser(description='Large-scale Point Cloud Semantic Segmentation with Superpoint Graphs')
 parser.add_argument('ROOT_PATH', help='name of the folder containing the data directory')
 parser.add_argument('--knn_geofeatures', default=45, type=int, help='number of neighbors for the geometric features')
@@ -173,32 +144,26 @@ args = parser.parse_args()
 if(args.overwrite):
     print("Warning: files will be overwritten !!")
 
+colors = ColorLabelManager()
+n_labels = colors.nbColor
 pathManager = PathManager(args)
 
 times = [0.,0.,0.,0.] # Time for computing: features / partition / spg
 
 for folder in pathManager.folders:
     print("=================\n   "+folder+"\n=================")
-    if folder == "train" :
-        folderTrain = True
-        n_labels = 13 # Number of classes
-    else:
-        folderTrain = False
-        n_labels = 0
 
     for i, fileName in enumerate(pathManager.allDataFileName[folder]):
 
+        n_labels = colors.nbColor
         dataFolder = pathManager.rootPath + "/data/" + folder + "/" 
-        if folderTrain:
-            dataFile = dataFolder + fileName + '/' + fileName  + '.txt'
-        else:
-            dataFile = dataFolder + fileName + '.ply' #or .las
+        dataFile = dataFolder + fileName + '.ply' #or .las
 
         featureFile  = pathManager.rootPath + "/features/" + folder + "/" + fileName + ".h5" 
         spgFile  = pathManager.rootPath + "/superpoint_graphs/" + folder + "/" + fileName + ".h5" 
         parseFile  = pathManager.rootPath + "/parsed/" + folder + "/" + fileName + ".h5"
 
-        voxelisedFile  = pathManager.rootPath + "/voxelised/" + folder + "/" + fileName + "/" + fileName + "-prunned" + str(args.voxel_width).replace(".", "-") + ".h5"
+        voxelisedFile  = pathManager.rootPath + "/data/voxelised/" + folder + "/" + fileName + "/" + fileName + "-prunned" + str(args.voxel_width).replace(".", "-") + ".ply"
 
         for sub in ["/features", "/superpoint_graphs", "/parsed", "/voxelised"] : 
             for subsub in ["/test", "/train"] : 
@@ -207,7 +172,7 @@ for folder in pathManager.folders:
 
         if not os.path.isdir(pathManager.rootPath + "/voxelised/" + folder + "/" + fileName): os.mkdir(pathManager.rootPath + "/voxelised/" + folder + "/" + fileName)
         
-        print(str(i + 1) + " / " + str(len(pathManager.allDataFileName[folder])) + "---> "+fileName)
+        print(str(i + 1) + " / " + str(len(pathManager.allDataFileName[folder])) + " ---> "+fileName)
         tab="   "
 
         #--- build the geometric feature file h5 file ---
@@ -217,15 +182,24 @@ for folder in pathManager.folders:
         else :
             storePreviousFile(featureFile)
 
-            readType = "s3dis" if folderTrain else "custom"
             start = time.perf_counter()
             if os.path.isfile(voxelisedFile):
                 print("Voxelised file found, voxelisation step skipped")
                 print("Read voxelised file")
-                xyz, rgb, labels, objects = readFile(voxelisedFile, readType)
+                xyz, rgb, labels, objects = provider.read_ply(voxelisedFile)
+                if len(labels) == 0:
+                    print("No labels found")
+                    n_labels = 0
+                else :
+                    print("Labels found")
             else :
                 print(tab + "Read {}".format(fileName))
-                xyz, rgb, labels, objects = readFile(dataFile, readType)
+                xyz, rgb, labels, objects = provider.read_ply(dataFile)
+                if len(labels) == 0:
+                    print("No labels found")
+                    n_labels = 0
+                else :
+                    print("Labels found")
 
                 end = time.perf_counter()
                 times[0] = times[0] + end - start
@@ -235,10 +209,7 @@ for folder in pathManager.folders:
                     xyz, rgb, labels = reduceDensity(xyz, args.voxel_width, rgb, labels, n_labels)
 
                 print(tab + "Save reduced density")
-                if len(labels) > 0:
-                    provider.write_ply_labels(voxelisedFile, xyz, rgb, labels)
-                else :
-                    provider.write_ply(voxelisedFile, xyz, rgb)
+                write_ply(voxelisedFile, xyz, rgb, labels.flatten())
 
             start = time.perf_counter()
 
@@ -296,7 +267,7 @@ for folder in pathManager.folders:
         if os.path.isfile(parseFile) and not args.overwrite :
             print(tab + "Reading the existing parsed file...")
         else:
-            parseCloudForPointNET(featureFile, spgFile, parseFile, folderTrain)
+            parseCloudForPointNET(featureFile, spgFile, parseFile)
 
         # print("Timer : {:0.4f} s / {:0.4f} s / {:0.4f} s ".format(times[0], times[1], times[2]))
         print(f"Timer : {times[0]:0.4f} s loading files / {times[1]:0.4f} s features / {times[2]:0.4f} s superpoints / {times[3]:0.4f} s graph")

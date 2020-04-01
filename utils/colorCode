@@ -1,0 +1,10 @@
+0  0   0   0  # Noir         - Inconnue
+1  0   0  255 # Bleu         - Sol
+2 255  0   0  # Rouge        - Murs
+3 255 255  0  # Jaune        - Plafond
+4  85 255 127 # Vert clair   - Tuyau
+5 170 255 255 # Bleu ciel    - Poutre
+6 255 170 127 # Orange clair - Railles
+7 255  85 255 # Rose         - Chaise
+8  0  255  0  # Vert         - Table
+9 255 170  0  # Orange       - Porte

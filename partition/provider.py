@@ -524,6 +524,12 @@ def write_features(file_name, geof, xyz, rgb, graph_nn, labels):
     data_file.create_dataset('xyz', data=xyz, dtype='float32')
     if len(rgb) > 0:
         data_file.create_dataset('rgb', data=rgb, dtype='uint8')
+
+    #if len(labels) > 0:
+    #    if len(labels) > 0 and len(labels.shape)>1 and labels.shape[1]>1:
+    #        data_file.create_dataset('labels', data=labels, dtype='uint32')
+    #    else:
+    #        data_file.create_dataset('labels', data=labels, dtype='uint8')
     if len(labels) > 0 and len(labels.shape)>1 and labels.shape[1]>1:
         data_file.create_dataset('labels', data=labels, dtype='uint32')
     else:
