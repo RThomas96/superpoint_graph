@@ -11,12 +11,15 @@ import argparse
 import sys
 sys.path.append("./partition/")
 from plyfile import PlyData, PlyElement
+from pathlib import Path
 import provider
 
 def openPredictions(res_file, h5FolderPath):
     try:
         pred_red  = np.array(provider.h5py.File(res_file, 'r').get(h5FolderPath))        
         if (len(pred_red) != len(components)):
+            print(len(pred_red))
+            print(len(components))
             raise ValueError("It looks like the spg is not adapted to the result file") 
         return provider.reduced_labels2full(pred_red, components, len(xyz))
     except OSError:
@@ -44,22 +47,25 @@ spg_file   = root + "/superpoint_graphs/" + folder + file_name + '.h5'
 res_file   = root + "/results/" + args.predFileName + '.h5'
 outPredFileName = file_name + "_pred.ply"
 outPredFile   = root + "/visualisation/predictions/" + args.predFileName + "/" + outPredFileName 
+Path(root + "/visualisation/predictions/" + args.predFileName).mkdir(parents=True, exist_ok=True)
 
 outSPntFileName = file_name + "_partition.ply"
 outSPntFile   = root + "/visualisation/superpoints/" + outSPntFileName 
+Path(root + "/visualisation/superpoints/" + args.predFileName).mkdir(parents=True, exist_ok=True)
 
 
 if not os.path.isfile(fea_file) :
     raise ValueError("%s does not exist and is needed" % fea_file)
 if not os.path.isfile(spg_file):    
     raise ValueError("%s does not exist and is needed to output the partition  or result ply" % spg_file) 
-if not os.path.isfile(res_file):
+if outPredictions and not os.path.isfile(res_file):
     raise ValueError("%s does not exist and is needed to output the result ply" % res_file) 
 
 geof, xyz, rgb, graph_nn, labels = provider.read_features(fea_file)
 graph_spg, components, in_component = provider.read_spg(spg_file)
 
-pred_full = openPredictions(res_file, folder + file_name)
+if outPredictions:
+    pred_full = openPredictions(res_file, folder + file_name)
 
 #if not bool(args.upsample):
 def checkIfExist(file, fileName):
@@ -74,9 +80,8 @@ def checkIfExist(file, fileName):
     return True
 
 if outPredictions:
-    n_labels = 10    
     if checkIfExist(outPredFile, outPredFileName):
-        provider.prediction2ply(outPredFile, xyz, pred_full+1, n_labels, "custom_dataset")
+        provider.prediction2ply(outPredFile, xyz, pred_full+1)
 
 if outSuperpoints:
     if checkIfExist(outSPntFile, outSPntFileName):

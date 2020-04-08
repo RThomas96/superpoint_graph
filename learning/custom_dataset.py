@@ -44,6 +44,10 @@ def get_datasets(args, test_seed_offset=0):
     if args.spg_attribs01:
        trainlist, testlist, validlist, scaler = spg.scaler01(trainlist, testlist, validlist=validlist)
 
+    " functools.partial(arg1, arg2, ...) = return the function : arg1(arg2, arg3, ...) "
+    " ListDataset(arg1, arg2) = dataset wich load data listed on arg1, and loaded with the function arg2. " 
+    "                           In our case arg2 is a functools.partial with spg.loader "
+    "                           And this function arg2 with load data given by arg1, in our case arg1 is data returned by spg_to_igraph"
     return tnt.dataset.ListDataset([spg.spg_to_igraph(*tlist) for tlist in trainlist],
                                     functools.partial(spg.loader, train=True, args=args, db_path=args.CUSTOM_SET_PATH)), \
            tnt.dataset.ListDataset([spg.spg_to_igraph(*tlist) for tlist in testlist],

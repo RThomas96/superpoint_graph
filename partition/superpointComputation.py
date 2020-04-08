@@ -129,6 +129,9 @@ def storePreviousFile(fileFullName):
 def addRGBToFeature(features, rgb):
     return np.hstack((features, rgb/255.)).astype('float32')#add rgb as a feature for partitioning
 
+def mkdirIfNotExist(dir):
+    if not os.path.isdir(dir): os.mkdir(dir)
+
 parser = argparse.ArgumentParser(description='Large-scale Point Cloud Semantic Segmentation with Superpoint Graphs')
 parser.add_argument('ROOT_PATH', help='name of the folder containing the data directory')
 parser.add_argument('--knn_geofeatures', default=45, type=int, help='number of neighbors for the geometric features')
@@ -139,6 +142,7 @@ parser.add_argument('--d_se_max', default=0, type=float, help='max length of sup
 parser.add_argument('--voxel_width', default=0.03, type=float, help='voxel size when subsampling (in m)')
 parser.add_argument('--ver_batch', default=0, type=int, help='Batch size for reading large files, 0 do disable batch loading')
 parser.add_argument('-ow', '--overwrite', action='store_true', help='Wether to read existing files or overwrite them')
+parser.add_argument('--save', action='store_true', help='Wether to read existing files or overwrite them')
 args = parser.parse_args()
 
 if(args.overwrite):
@@ -165,12 +169,13 @@ for folder in pathManager.folders:
 
         voxelisedFile  = pathManager.rootPath + "/data/voxelised/" + folder + "/" + fileName + "/" + fileName + "-prunned" + str(args.voxel_width).replace(".", "-") + ".ply"
 
-        for sub in ["/features", "/superpoint_graphs", "/parsed", "/voxelised"] : 
+        for sub in ["/features", "/superpoint_graphs", "/parsed"] : 
+            mkdirIfNotExist(pathManager.rootPath + sub)
             for subsub in ["/test", "/train"] : 
-                if not os.path.isdir(pathManager.rootPath + sub): os.mkdir(pathManager.rootPath + sub)
-                if not os.path.isdir(pathManager.rootPath + sub + subsub): os.mkdir(pathManager.rootPath + sub + subsub)
+                mkdirIfNotExist(pathManager.rootPath + sub + subsub)
+        mkdirIfNotExist(pathManager.rootPath + "/reports")
 
-        if not os.path.isdir(pathManager.rootPath + "/voxelised/" + folder + "/" + fileName): os.mkdir(pathManager.rootPath + "/voxelised/" + folder + "/" + fileName)
+        #if not os.path.isdir(pathManager.rootPath + "/voxelised/" + folder + "/" + fileName): os.mkdir(pathManager.rootPath + "/voxelised/" + folder + "/" + fileName)
         
         print(str(i + 1) + " / " + str(len(pathManager.allDataFileName[folder])) + " ---> "+fileName)
         tab="   "
@@ -180,7 +185,8 @@ for folder in pathManager.folders:
             print(tab + "Reading the existing feature file...")
             geof, xyz, rgb, graph_nn, labels = provider.read_features(featureFile)
         else :
-            storePreviousFile(featureFile)
+            if args.save:
+                storePreviousFile(featureFile)
 
             start = time.perf_counter()
             if os.path.isfile(voxelisedFile):
@@ -232,7 +238,8 @@ for folder in pathManager.folders:
             print(tab + "Reading the existing superpoint graph file...")
             graph_sp, components, in_component = provider.read_spg(spgFile)
         else:
-            storePreviousFile(spgFile)
+            if args.save:
+                storePreviousFile(spgFile)
             #--- build the spg h5 file --
             start = time.perf_counter()
 
@@ -249,8 +256,10 @@ for folder in pathManager.folders:
 
             # Compute optimisation solution with cut pursuit
             print(tab + "Resolve optimisation problem...")
+
             components, in_component = libcp.cutpursuit(features, graph_nn["source"], graph_nn["target"], graph_nn["edge_weight"], args.reg_strength)
             components = np.array(components, dtype = 'object')
+
 
             end = time.perf_counter()
             times[2] = times[2] + end - start
