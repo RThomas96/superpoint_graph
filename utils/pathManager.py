@@ -7,7 +7,7 @@ class PathManager :
         if not os.path.isdir(self.rootPath):
             raise NameError('The root subfolder you indicate doesn\'t exist')
 
-        dataFolder = self.rootPath + "/data/"
+        dataFolder = self.rootPath + "/data/raw/"
         if not os.path.isdir(self.rootPath):
             raise NameError('The data folder doesn\'t exist or is empty')
 

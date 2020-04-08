@@ -160,7 +160,7 @@ for folder in pathManager.folders:
     for i, fileName in enumerate(pathManager.allDataFileName[folder]):
 
         n_labels = colors.nbColor
-        dataFolder = pathManager.rootPath + "/data/" + folder + "/" 
+        dataFolder = pathManager.rootPath + "/data/raw/" + folder + "/" 
         dataFile = dataFolder + fileName + '.ply' #or .las
 
         featureFile  = pathManager.rootPath + "/features/" + folder + "/" + fileName + ".h5" 

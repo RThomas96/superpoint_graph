@@ -17,6 +17,9 @@ import pandas as pd
 import h5py
 #import laspy
 from sklearn.neighbors import NearestNeighbors
+sys.path.append("./utils")
+
+from colorLabelManager import ColorLabelManager
 
 
 DIR_PATH = os.path.dirname(os.path.realpath(__file__))
@@ -54,13 +57,16 @@ def geof2ply(filename, xyz, geof):
     ply = PlyData([PlyElement.describe(vertex_all, 'vertex')], text=True)
     ply.write(filename)
 #------------------------------------------------------------------------------
-def prediction2ply(filename, xyz, prediction, n_label, dataset):
+def prediction2ply(filename, xyz, prediction):
     """write a ply with colors for each class"""
+    colorLabelManager = ColorLabelManager()
+    n_label = colorLabelManager.nbColor
     if len(prediction.shape) > 1 and prediction.shape[1] > 1:
         prediction = np.argmax(prediction, axis = 1)
     color = np.zeros(xyz.shape)
     for i_label in range(0, n_label + 1):
-        color[np.where(prediction == i_label), :] = get_color_from_label(i_label, dataset)
+        #color[np.where(prediction == i_label), :] = get_color_from_label(i_label, dataset)
+        color[np.where(prediction == i_label), :] = colorLabelManager.labelDict[i_label] 
     prop = [('x', 'f4'), ('y', 'f4'), ('z', 'f4'), ('red', 'u1'), ('green', 'u1'), ('blue', 'u1')]
     vertex_all = np.empty(len(xyz), dtype=prop)
     for i in range(0, 3):

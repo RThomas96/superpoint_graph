@@ -40,21 +40,33 @@ def interpolate_labels(xyz_up, xyz, labels):
     distances, neighbor = nn.kneighbors(xyz_up)
     return labels[neighbor].flatten()
 
-parser = argparse.ArgumentParser(description='Large-scale Point Cloud Semantic Segmentation with Superpoint Graphs')
-parser.add_argument('labelisedFile', help='name of the folder containing the data directory')
-parser.add_argument('originalFile', help='name of the folder containing the data directory')
+parser = argparse.ArgumentParser(description='Apply labels from a labelised file into another file')
+parser.add_argument('ROOT_PATH', help='name of the folder containing the data directory')
+parser.add_argument('fileName', help='name of the folder containing the data directory')
+#parser.add_argument('labelisedFile', help='name of the folder containing the data directory')
+#parser.add_argument('originalFile', help='name of the folder containing the data directory')
 args = parser.parse_args()
 
 colorManager = ColorLabelManager()
 
 times = [0.,0.,0.,0.] # Time for computing: features / partition / spg
 
-scriptPath = os.path.dirname(os.path.abspath(__file__)) + "/.."
-originalFile = scriptPath + "/" + args.originalFile 
-labelisedFile = scriptPath + "/" + args.labelisedFile 
+scriptPath = os.path.dirname(os.path.abspath(__file__)) + "/../" + args.ROOT_PATH
+print("scriptPath = " + scriptPath)
+voxelisedPath = scriptPath + "/data/voxelised"
+voxelisedPath = voxelisedPath + "/test" if os.path.isdir(voxelisedPath + "/test/" + args.fileName) else voxelisedPath + "/train"
+voxelisedPath = voxelisedPath + "/" + args.fileName 
+print("voxelisedPath = " + voxelisedPath)
 
-path=originalFile.split('/')
-outFile = '/'.join(path[:-2]) + '/upSample-' + originalFile[-1] 
+originalFile = glob(voxelisedPath + "/*-noLabel.ply")[0]
+print("originalFile = " + originalFile)
+labelisedFile = glob(voxelisedPath + "/*-labelised.ply")[0]
+print("labelisedFile = " + labelisedFile)
+
+outFileName = originalFile.split('/')[-1].replace('-noLabel', '')
+
+outFile = voxelisedPath + "/" + outFileName 
+print("outFile = " + outFile)
 
 print("Reading labelised file")
 xyz, rgb, labels, objects = provider.read_ply(labelisedFile)
