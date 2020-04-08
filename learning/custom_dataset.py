@@ -33,16 +33,16 @@ def get_datasets(args, test_seed_offset=0):
     """build training and testing set"""
     
     #for a simple train/test organization
-    trainset = ['train/' + f for f in os.listdir(args.ROOT_PATH + '/superpoint_graphs/train') if not os.path.isdir(f)]
-    testset  = ['test/' + f for f in os.listdir(args.ROOT_PATH + '/superpoint_graphs/test') if not os.path.isdir(args.ROOT_PATH + '/superpoint_graphs/test/' + f)]
+    trainset = ['train/' + f for f in os.listdir(args.CUSTOM_SET_PATH + '/superpoint_graphs/train') if not os.path.isdir(f)]
+    testset  = ['test/' + f for f in os.listdir(args.CUSTOM_SET_PATH + '/superpoint_graphs/test') if not os.path.isdir(args.CUSTOM_SET_PATH + '/superpoint_graphs/test/' + f)]
     
     # Load superpoints graphs
     testlist, trainlist, validlist = [], [], []
     for n in trainset:
-        trainlist.append(spg.spg_reader(args, args.ROOT_PATH + '/superpoint_graphs/' + n, True))
-        validlist.append(spg.spg_reader(args, args.ROOT_PATH + '/superpoint_graphs/' + n, True))
+        trainlist.append(spg.spg_reader(args, args.CUSTOM_SET_PATH + '/superpoint_graphs/' + n, True))
+        validlist.append(spg.spg_reader(args, args.CUSTOM_SET_PATH + '/superpoint_graphs/' + n, True))
     for n in testset:
-        testlist.append(spg.spg_reader(args, args.ROOT_PATH + '/superpoint_graphs/' + n, True))
+        testlist.append(spg.spg_reader(args, args.CUSTOM_SET_PATH + '/superpoint_graphs/' + n, True))
 
     # Normalize edge features
     if args.spg_attribs01:

@@ -152,7 +152,7 @@ if(args.overwrite):
 colors = ColorLabelManager()
 n_labels = colors.nbColor
 pathManager = PathManager(args)
-reportManager = ReportManager(args.ROOT_PATH)
+reportManager = ReportManager(pathManager.rootPath, args)
 
 times = [0.,0.,0.,0.] # Time for computing: features / partition / spg
 

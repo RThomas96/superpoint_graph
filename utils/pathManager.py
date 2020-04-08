@@ -3,7 +3,7 @@ from glob import glob
 
 class PathManager : 
     def __init__(self, args, dataType="ply"):
-        self.rootPath = os.path.dirname(os.path.realpath(__file__)) + '/../' + args.ROOT_PATH
+        self.rootPath = os.path.dirname(os.path.realpath(__file__)) + '/../projects/' + args.ROOT_PATH
         if not os.path.isdir(self.rootPath):
             raise NameError('The root subfolder you indicate doesn\'t exist')
 

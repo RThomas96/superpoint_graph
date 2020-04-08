@@ -36,7 +36,7 @@ args = parser.parse_args()
 outSuperpoints = 's' in args.outType
 outPredictions = 'p' in args.outType
 #---path to data---------------------------------------------------------------
-root = os.path.dirname(os.path.realpath(__file__)) + '/../' + args.ROOT_PATH
+root = os.path.dirname(os.path.realpath(__file__)) + '/../projects/' + args.ROOT_PATH
 
 folder = os.path.split(args.file_path)[0] + '/'
 file_name = os.path.split(args.file_path)[1]
