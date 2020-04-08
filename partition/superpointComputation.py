@@ -220,6 +220,9 @@ for folder in pathManager.folders:
                 print(tab + "Save reduced density")
                 write_ply(voxelisedFile, xyz, rgb, labels.flatten())
 
+            if colors.aggregation:
+                colors.aggregateLabels(labels)
+            
             start = time.perf_counter()
 
             #---compute 10 nn graph-------
