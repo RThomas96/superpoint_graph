@@ -24,6 +24,7 @@ from sklearn.linear_model import RANSACRegressor
 
 from colorLabelManager import ColorLabelManager
 from pathManager import PathManager
+from reportManager import ReportManager
 
 import libcp
 import graphs
@@ -151,11 +152,13 @@ if(args.overwrite):
 colors = ColorLabelManager()
 n_labels = colors.nbColor
 pathManager = PathManager(args)
+reportManager = ReportManager(args.ROOT_PATH)
 
 times = [0.,0.,0.,0.] # Time for computing: features / partition / spg
 
 for folder in pathManager.folders:
     print("=================\n   "+folder+"\n=================")
+    reportManager.train = not reportManager.train
 
     for i, fileName in enumerate(pathManager.allDataFileName[folder]):
 
@@ -268,6 +271,8 @@ for folder in pathManager.folders:
             start = time.perf_counter()
             graph_sp = graphs.compute_sp_graph(xyz, args.d_se_max, in_component, components, labels, n_labels)
 
+            reportManager.computeStatsOnSpp(components, graph_sp)
+
             end = time.perf_counter()
             times[3] = times[3] + end - start
 
@@ -281,3 +286,5 @@ for folder in pathManager.folders:
         # print("Timer : {:0.4f} s / {:0.4f} s / {:0.4f} s ".format(times[0], times[1], times[2]))
         print(f"Timer : {times[0]:0.4f} s loading files / {times[1]:0.4f} s features / {times[2]:0.4f} s superpoints / {times[3]:0.4f} s graph")
         times=[0., 0., 0., 0.]
+
+reportManager.saveReport()
