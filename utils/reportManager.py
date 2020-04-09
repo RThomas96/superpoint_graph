@@ -1,14 +1,21 @@
 import numpy as np
+from pathlib import Path
 from datetime import datetime
 from operator import truediv
 from collections import Counter
 from colorLabelManager import ColorLabelManager
 
 class ReportManager:
-    def __init__(self, rootPath):
+    def __init__(self, rootPath, args):
         self.filePath = rootPath + "/reports/" + datetime.now().strftime("%Y-%m-%d-%H:%M:%S") + ".report"
+        Path(rootPath + "/reports").mkdir(parents=True, exist_ok=True)
         " Indicate if next values added to the class will be from from training data "
         self.train = True
+
+        " Parameters "
+        self.regStrength = args.reg_strength 
+        self.knnGeo = args.knn_geofeatures 
+        self.knnAdj = args.knn_adj
 
         " First value are from data training, second one from data test "
         self.nbSuperpoints = [0, 0]
@@ -38,7 +45,12 @@ class ReportManager:
         nameDict = colorLabelManager.nameDict
         for i in [0, 1]:
             for key in nameDict.keys():
-                self.nbOfSppPerClass[i][nameDict[key]] = self.nbOfSppPerClass[i].pop(key)
+                try:
+                    self.nbOfSppPerClass[i][nameDict[key]] = self.nbOfSppPerClass[i].pop(key)
+                # If a label hasn't any point, there is no entry in nbOfSppPerClass because of Counter()
+                # We don't need to rename it
+                except KeyError:
+                    pass
 
     def saveReport(self):
         self.averageComputations()
@@ -49,11 +61,17 @@ class ReportManager:
         report += "\n"
         report += "First value is training data, second one is testing\n"
         report += "\n"
+        report += "## Parameters\n"
+        report += "\n"
+        report += "Regularization strength: {}\n".format(self.regStrength)
+        report += "Knn geometric features: {}\n".format(self.knnGeo)
+        report += "Knn adjacency graph: {}\n".format(self.knnAdj)
+        report += "\n"
         report += "## General analysis\n"
         report += "\n"
         report += "Number of points: {} \n".format(self.nbOfPoint)
         report += "\n"
-        report += "## Super points analysis\n"
+        report += "## Superpoints analysis\n"
         report += "\n"
         report += "Number of superpoints: {} \n".format(self.nbSuperpoints)
         report += "Average number of points per superpoints: {} \n".format(self.avgNbOfPointPerSpp)

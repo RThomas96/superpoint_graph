@@ -17,9 +17,16 @@ class ColorLabelManager:
                 # First label is "unknown" label and black color
                 # This label is writed by prediction writer, and not in the color file
                 labelDict[0] = [0, 0, 0]
+
+                # Name dict is used per per_class_iou, and then do not need to contain 0
+                # Note that in report 0 cannot be renamed
+                #nameDict[0] = 'Inconnue'
                 for i, line in enumerate(colorFile):
                         values = line.split()
                         key = values[1]+values[2]+values[3]
+                        # No +1 here cause colorDict is used by upSample script
+                        # And there is no unknown label for now in labelised files
+                        # To add unknown labels modify here AND AT AGGREGATE LABEL THAT ADD +1
                         colorDict[key] = values[0]
                         # +1 here cause first label is "unknown" label 
                         labelDict[i+1] = [values[1], values[2], values[3]]
@@ -28,10 +35,10 @@ class ColorLabelManager:
                 return colorDict, labelDict, nameDict, aggregationDict
 
         def aggregateLabels(self, labels):
-                for label in labels:
+                for i, label in enumerate(labels):
                         for key, value in self.aggregationDict.items():
                                 if label in value:
-                                        label = key
+                                        labels[i] = key+1
                                         break
 
         def aggregateDict(self):

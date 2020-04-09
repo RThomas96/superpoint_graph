@@ -222,6 +222,8 @@ for folder in pathManager.folders:
 
             if colors.aggregation:
                 colors.aggregateLabels(labels)
+            else:
+                labels = np.array([label+1 for label in labels])
             
             start = time.perf_counter()
 

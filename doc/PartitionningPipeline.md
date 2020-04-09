@@ -1,4 +1,4 @@
-# Full pipeline description of Superpoint graph
+# Full pipeline description of Superpoint graoh computation
 
 ## File specificities
 
@@ -38,8 +38,8 @@ Computation of two knn\_graph, one with "knn\_geofeatures" neighbors, and one wi
 Next, the number "knn\_geofeatures" will be refered as $knnGeo and "knn\_adj" as $knnadj
 TODO This step has an option "Voronoi".
 
-* Computation of $knngeo neighbors relations and distances with sklearn (a python lib)
-* Only neighbors relation is returned and then used for geometric features computation. As the form of simple array, the $knnGeo first values are indexes of neighbors with the first point and so on
+* Computation of $knnGeo neighbors relations and distances with sklearn (a python lib)
+* Only neighbors relations are returned and then used for geometric features computation. As the form of simple array, the $knnGeo first values are indexes of neighbors with the first point and so on
 * The whole graph, relations and distances, is then cut to be only a $knnadj" graph and returned 
 * The graph is then built and returned, points are then reordered into "sources", neighbors as "target" and distances as "edges"
 
@@ -88,7 +88,7 @@ Related file: ply\_c.cpp, compute\_geof, l. 385
 
 Put all normalized values between -0.5 and 0.5 into a file, with one array per superpoint (in the code superpoint = component).
 Each array correspond to a superpoint, and contain a set of values for each points in this superpoint.
-Values for each points have this format: [[xyz, rgb, e, lpsv, xyzn, distanceToCenter], [...], ...], when each subarray are values of a point.
+Values for each superpoints have this format: [[xyz, rgb, e, lpsv, xyzn, distanceToCenter], [...], ...], when each subarray are values of a point.
 
 * xyz: all points coordinates not normalized (usefull to stay variant to object size)
 * rgb: normalized points color (rgb = rgb/255.)
