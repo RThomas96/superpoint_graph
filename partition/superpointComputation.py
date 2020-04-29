@@ -115,14 +115,13 @@ def reduceDensity(xyz, voxel_width, rgb, labels, n_labels):
         labels = np.array([]) 
     return xyz, rgb, labels
 
-def storePreviousFile(fileFullName):
+def storePreviousFile(fileFullName, timeStamp):
     if(os.path.isfile(fileFullName)):
         fileName   = os.path.splitext(os.path.basename(fileFullName))[0]
         rootPath = os.path.dirname(fileFullName)
         logPath = rootPath + "/log"
         if not os.path.isdir(logPath):
             os.mkdir(logPath)
-        timeStamp = datetime.now().strftime("-%d-%m-%Y-%H:%M:%S")
         newName = logPath + "/{}{}.log.h5".format(fileName, timeStamp)
         shutil.move(fileFullName, newName)
         print("Store previous file at {}...".format(newName))
@@ -148,6 +147,8 @@ args = parser.parse_args()
 
 if(args.overwrite):
     print("Warning: files will be overwritten !!")
+
+timeStamp = datetime.now().strftime("-%d-%m-%Y-%H:%M:%S")
 
 colors = ColorLabelManager()
 n_labels = colors.nbColor
@@ -189,7 +190,7 @@ for folder in pathManager.folders:
             geof, xyz, rgb, graph_nn, labels = provider.read_features(featureFile)
         else :
             if args.save:
-                storePreviousFile(featureFile)
+                storePreviousFile(featureFile, timeStamp)
 
             start = time.perf_counter()
             if os.path.isfile(voxelisedFile):
@@ -247,7 +248,7 @@ for folder in pathManager.folders:
             graph_sp, components, in_component = provider.read_spg(spgFile)
         else:
             if args.save:
-                storePreviousFile(spgFile)
+                storePreviousFile(spgFile, timeStamp)
             #--- build the spg h5 file --
             start = time.perf_counter()
 

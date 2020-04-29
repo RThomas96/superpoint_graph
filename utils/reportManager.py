@@ -16,6 +16,7 @@ class ReportManager:
         self.regStrength = args.reg_strength 
         self.knnGeo = args.knn_geofeatures 
         self.knnAdj = args.knn_adj
+        self.lambdaWeight = args.lambda_edge_weight
 
         " First value are from data training, second one from data test "
         self.nbSuperpoints = [0, 0]
@@ -64,6 +65,7 @@ class ReportManager:
         report += "## Parameters\n"
         report += "\n"
         report += "Regularization strength: {}\n".format(self.regStrength)
+        report += "Lambda edge weight: {}\n".format(self.lambdaWeight)
         report += "Knn geometric features: {}\n".format(self.knnGeo)
         report += "Knn adjacency graph: {}\n".format(self.knnAdj)
         report += "\n"
