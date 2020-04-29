@@ -132,13 +132,16 @@ def loader(entry, train, args, db_path, test_seed_offset=0):
     G, fname = entry
     # 1) subset (neighborhood) selection of (permuted) superpoint graph
     if train:
+        # Randomize nodes selection
         if 0 < args.spg_augm_hardcutoff < G.vcount():
             perm = list(range(G.vcount())); random.shuffle(perm)
             G = G.permute_vertices(perm)
 
+        # Append random subgraphs of order 3
         if 0 < args.spg_augm_nneigh < G.vcount():
             G = random_neighborhoods(G, args.spg_augm_nneigh, args.spg_augm_order)
 
+        # Return a continuous subgraph of maximum augm_hardcutoff points with each more than ptn_minpts points
         if 0 < args.spg_augm_hardcutoff < G.vcount():
             G = k_big_enough(G, args.ptn_minpts, args.spg_augm_hardcutoff)
 

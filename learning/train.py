@@ -76,12 +76,14 @@ def main():
     parser.add_argument('--use_pyg', default=0, type=int, help='Wether to use Pytorch Geometric for graph convolutions')
 
     # Model
+    # Define recurrent network module nature GRU/LSTM, the number of iterations and the number of features
     parser.add_argument('--model_config', default='gru_10,f_9', help='Defines the model as a sequence of layers, see graphnet.py for definitions of respective layers and acceptable arguments. In short: rectype_repeats_mv_layernorm_ingate_concat, with rectype the type of recurrent unit [gru/crf/lstm], repeats the number of message passing iterations, mv (default True) the use of matrix-vector (mv) instead vector-vector (vv) edge filters, layernorm (default True) the use of layernorms in the recurrent units, ingate (default True) the use of input gating, concat (default True) the use of state concatenation')
     parser.add_argument('--seed', default=1, type=int, help='Seed for random initialisation')
     parser.add_argument('--edge_attribs', default='delta_avg,delta_std,nlength/ld,surface/ld,volume/ld,size/ld,xyz/d', help='Edge attribute definition, see spg_edge_features() in spg.py for definitions.')
 
     # Point cloud processing
     parser.add_argument('--pc_attribs', default='xyzrgbelpsvXYZ', help='Point attributes fed to PointNets, if empty then all possible. xyz = coordinates, rgb = color, e = elevation, lpsv = geometric feature, d = distance to center')
+    # Data augmentation for each superpoint
     parser.add_argument('--pc_augm_scale', default=0, type=float, help='Training augmentation: Uniformly random scaling in [1/scale, scale]')
     parser.add_argument('--pc_augm_rot', default=1, type=int, help='Training augmentation: Bool, random rotation around z-axis')
     parser.add_argument('--pc_augm_mirror_prob', default=0, type=float, help='Training augmentation: Probability of mirroring about x or y axes')
@@ -95,16 +97,23 @@ def main():
     parser.add_argument('--fnet_bnidx', default=2, type=int, help='Layer index to insert batchnorm to. -1=do not insert.')
     parser.add_argument('--edge_mem_limit', default=30000, type=int, help='Number of edges to process in parallel during computation, a low number can reduce memory peaks.')
 
-    # Superpoint graph
+    # Superpoint graph subsample process
     parser.add_argument('--spg_attribs01', default=1, type=int, help='Bool, normalize edge features to 0 mean 1 deviation')
-    parser.add_argument('--spg_augm_nneigh', default=100, type=int, help='Number of neighborhoods to sample in SPG')
+    # Superpoint graph is subsampled randomly 
+    # Small subgraphs of order 3 are concatenate
     parser.add_argument('--spg_augm_order', default=3, type=int, help='Order of neighborhoods to sample in SPG')
+    # A total of 100 subgraph of order 3 are concatenate
+    parser.add_argument('--spg_augm_nneigh', default=100, type=int, help='Number of neighborhoods to sample in SPG')
+    # The final graph should be with a maximum number of 512 nodes 
     parser.add_argument('--spg_augm_hardcutoff', default=512, type=int, help='Maximum number of superpoints larger than args.ptn_minpts to sample in SPG')
     parser.add_argument('--spg_superedge_cutoff', default=-1, type=float, help='Artificially constrained maximum length of superedge, -1=do not constrain')
 
     # Point net
+    # All superpoints with less than this amount of point rely solely on contextual classification
     parser.add_argument('--ptn_minpts', default=40, type=int, help='Minimum number of points in a superpoint for computing its embedding.')
+    # All superpoints are resampled to this size for pointnet
     parser.add_argument('--ptn_npts', default=128, type=int, help='Number of input points for PointNet.')
+    # Pointnet layer configuration
     parser.add_argument('--ptn_widths', default='[[64,64,128,128,256], [256,64,32]]', help='PointNet widths')
     parser.add_argument('--ptn_widths_stn', default='[[64,64,128], [128,64]]', help='PointNet\'s Transformer widths')
     parser.add_argument('--ptn_nfeat_stn', default=11, type=int, help='PointNet\'s Transformer number of input features')
@@ -243,6 +252,9 @@ def main():
         loss_meter = tnt.meter.AverageValueMeter()
         confusion_matrix = metrics.ConfusionMatrix(dbinfo['classes'])
 
+        # DOOOOC
+        # tvec_cpu = groundtruth = [0:2000] with in each case [0:9] number of point for each label
+        # o_cpu    = predictions = [0:2000] one value for each prediction
         # iterate over dataset in batches
         for bidx, (targets, GIs, clouds_data) in enumerate(loader):
             model.ecc.set_info(GIs, args.cuda)
@@ -293,6 +305,8 @@ def main():
 
         # aggregate predictions (mean)
         for fname, lst in collected.items():
+            # o_cpu    = PREDICTIONS
+            # tvec_cpu = ground truth
             o_cpu, t_cpu, tvec_cpu = list(zip(*lst))
             if args.test_multisamp_n > 1:
                 o_cpu = np.mean(np.stack(o_cpu,0),0)
