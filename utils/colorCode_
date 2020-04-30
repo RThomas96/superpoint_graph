@@ -1,9 +1,6 @@
 0  0   0  255 # Bleu         - Sol
-1 255  0   0  # Rouge        - Murs
+0 255  0   0  # Rouge        - Murs
 2 255 255  0  # Jaune        - Plafond
-3  85 255 127 # Vert-clair   - Tuyau
-4 170 255 255 # Bleu-ciel    - Poutre
-5 255 170 127 # Orange-clair - Railles
-6 255  85 255 # Rose         - Chaise
-7  0  255  0  # Vert         - Table
-8 255 170  0  # Orange       - Porte
+2  85 255 127 # Vert-clair   - Tuyau
+2 170 255 255 # Bleu-ciel    - Poutre
+2 255 170 127 # Orange-clair - Railles
