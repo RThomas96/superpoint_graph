@@ -64,14 +64,24 @@ def get_info(args):
     colors = ColorLabelManager()
 
     edge_feats = 0
-    for attrib in args.edge_attribs.split(','):
-        a = attrib.split('/')[0]
-        if a in ['delta_avg', 'delta_std', 'xyz']:
-            edge_feats += 3
-        else:
-            edge_feats += 1
+    try:
+        for attrib in args.edge_attribs.split(','):
+            a = attrib.split('/')[0]
+            if a in ['delta_avg', 'delta_std', 'xyz']:
+                edge_feats += 3
+            else:
+                edge_feats += 1
+    # If it is used for supervized_partition, there is no edge_feats attribute
+    except AttributeError:
+        edge_feats = 0
 
-    if args.loss_weights == 'none':
+    loss = 'none'
+    try:
+        loss = args.loss_weights
+    except AttributeError:
+        loss = args.loss_weight
+
+    if loss == 'none':
         weights = np.ones((colors.nbColor,),dtype='f4')
     else:
         print("Loss weights not implemented yet !")

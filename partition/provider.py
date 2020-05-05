@@ -559,7 +559,10 @@ def read_features(file_name):
     rgb = data_file["rgb"][:]
     source = data_file["source"][:]
     target = data_file["target"][:]
-    distances = data_file["distances"][:]
+    try:
+        distances = data_file["distances"][:]
+    except KeyError:
+        distances = []
 
     #---set the graph---
     graph_nn = dict([("is_nn", True)])

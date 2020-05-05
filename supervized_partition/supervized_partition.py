@@ -25,6 +25,10 @@ import torchnet as tnt
 
 DIR_PATH = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(0, os.path.join(DIR_PATH, '..'))
+sys.path.append("./utils")
+
+from colorLabelManager import ColorLabelManager
+from pathManager import PathManager
 
 from partition.ply_c import libply_c
 
@@ -56,14 +60,15 @@ from folderhierarchy import FolderHierachy
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Large-scale Point Cloud Semantic Segmentation with Superpoint Graphs')
+    parser.add_argument('ROOT_PATH', default='datasets/s3dis')
+    parser.add_argument('-ow', '--overwrite', action='store_true', help='Wether to read existing files or overwrite them')
     # Dataset
-    parser.add_argument('--dataset', default='s3dis', help='Dataset name: sema3d|s3dis|vkitti')
-    parser.add_argument('--cvfold', default=1, type=int, help='Fold left-out for testing in leave-one-out setting (S3DIS)')
+    #parser.add_argument('--dataset', default='s3dis', help='Dataset name: sema3d|s3dis|vkitti')
+    #parser.add_argument('--cvfold', default=1, type=int, help='Fold left-out for testing in leave-one-out setting (S3DIS)')
     parser.add_argument('--resume', default='', help='Loads a previously saved model.')
     parser.add_argument('--db_train_name', default='trainval', help='Training set (Sema3D)')
     parser.add_argument('--db_test_name', default='testred', help='Test set (Sema3D)')
-    parser.add_argument('--ROOT_PATH', default='datasets/s3dis')
-    parser.add_argument('--odir', default='results_emb/s3dis', help='folder for saving the trained model')
+    #parser.add_argument('--odir', default='results_emb/s3dis', help='folder for saving the trained model')
     parser.add_argument('--spg_out', default=1, type=int, help='wether to compute the SPG for linking with the SPG semantic segmentation method')
     
     # Learning process arguments
@@ -78,8 +83,9 @@ def parse_args():
     parser.add_argument('--lr_decay', default=0.7, type=float, help='Multiplicative factor used on learning rate at `lr_steps`')
     parser.add_argument('--lr_steps', default='[20,35,45]', help='List of epochs where the learning rate is decreased by `lr_decay`')
     parser.add_argument('--momentum', default=0.9, type=float, help='Momentum')
-    parser.add_argument('--epochs', default=20, type=int, help='Number of epochs to train. If <=0, only testing will be done.')
-    parser.add_argument('--batch_size', default=5, type=int, help='Batch size')
+    parser.add_argument('--epochs', default=5, type=int, help='Number of epochs to train. If <=0, only testing will be done.')
+    # CHANGE -> 2 is for debug purpose, original = 5
+    parser.add_argument('--batch_size', default=2, type=int, help='Batch size')
     parser.add_argument('--optim', default='adam', help='Optimizer: sgd|adam')
     parser.add_argument('--grad_clip', default=1, type=float, help='Element-wise clipping of gradient. If 0, does not clip')
     # Point cloud processing
@@ -134,6 +140,101 @@ def parse_args():
 
     return args
 
+def parseCloudForPointNET(featureFile, graphFile, parseFile):
+    """ Preprocesses data by splitting them by components and normalizing."""
+
+    ####################
+    # Computation of all the features usefull for local descriptors computation made by PointNET
+    ####################
+    # This file is geometric features computed to SuperPoint construction
+    # There are still usefull for local descriptors computation 
+    geometricFeatureFile = h5py.File(featureFile, 'r')
+    xyz = geometricFeatureFile['xyz'][:]
+    rgb = geometricFeatureFile['rgb'][:].astype(np.float)
+    rgb = rgb/255.0 - 0.5
+    # elpsv = np.stack([ featureFile['xyz'][:,2][:], featureFile['linearity'][:], featureFile['planarity'][:], featureFile['scattering'][:], featureFile['verticality'][:] ], axis=1)
+
+    #lpsv = geometricFeatureFile['geof'][:] 
+    #lpsv -= 0.5 #normalize
+    lpsv = np.stack([geometricFeatureFile['geof'][:] ]).squeeze()
+
+    # Compute elevation with simple Ransac from low points
+    #if isTrainFolder:
+    #    e = xyz[:,2] / 4 - 0.5 # (4m rough guess)
+    #else :
+    low_points = ((xyz[:,2]-xyz[:,2].min() < 0.5)).nonzero()[0]
+
+    try:
+        e = geometricFeatureFile['elevation'][:]
+    except ValueError as error:
+        print ("Elevation not already computed !" + error) 
+        try:
+            reg = RANSACRegressor(random_state=0).fit(xyz[low_points,:2], xyz[low_points,2])
+            e = xyz[:,2]-reg.predict(xyz[:,:2])
+            e /= np.max(np.abs(e),axis=0)
+            e *= 0.5
+        except ValueError as error:
+            print ("ERROR ransac regressor: " + error) 
+            e = xyz[:,2] / 4 - 0.5 # (4m rough guess)
+
+    # rescale to [-0.5,0.5]; keep xyz
+    #warning - to use the trained model, make sure the elevation is comparable
+    #to the set they were trained on
+    #i.e. ~0 for roads and ~0.2-0.3 for builings for sema3d
+    # and -0.5 for floor and 0.5 for ceiling for s3dis
+
+    # elpsv[:,0] /= 100 # (rough guess) #adapt 
+    # elpsv[:,1:] -= 0.5
+    # rgb = rgb/255.0 - 0.5
+
+    # Add some new features, why not ?
+    room_center = xyz[:,[0,1]].mean(0) #compute distance to room center, useful to detect walls and doors
+    distance_to_center = np.sqrt(((xyz[:,[0,1]]-room_center)**2).sum(1))
+    distance_to_center = (distance_to_center - distance_to_center.mean())/distance_to_center.std()
+
+    ma, mi = np.max(xyz,axis=0,keepdims=True), np.min(xyz,axis=0,keepdims=True)
+    xyzn = (xyz - mi) / (ma - mi + 1e-8)   # as in PointNet ("normalized location as to the room (from 0 to 1)")
+
+    # Concatenante data so that each line have this format
+    parsedData = np.concatenate([xyz, rgb, e[:,np.newaxis], lpsv, xyzn, distance_to_center[:,None]], axis=1)
+
+    # Old features
+    # parsedData = np.concatenate([xyz, rgb, elpsv], axis=1)
+
+    graphFile = h5py.File(graphFile, 'r')
+    nbComponents = len(graphFile['components'].keys())
+
+    with h5py.File(parseFile, 'w') as parsedFile:
+        for components in range(nbComponents):
+            idx = graphFile['components/{:d}'.format(components)][:].flatten()
+            if idx.size > 10000: # trim extra large segments, just for speed-up of loading time
+                ii = random.sample(range(idx.size), k=10000)
+                idx = idx[ii]
+            # For all points in the superpoint ( the set of index "idx"), get all correspondant parsed data and add it to the file
+            parsedFile.create_dataset(name='{:d}'.format(components), data=parsedData[idx,...])
+
+def create_dataset(args, test_seed_offset=0):
+    """ Gets training and test datasets. """
+    # Load formatted clouds
+    testlist, trainlist = [], []
+
+    folder = "/features_supervized"
+
+    trainset = ['train/' + f for f in os.listdir(args.CUSTOM_SET_PATH + folder + '/train') if not os.path.isdir(f)]
+    testset  = ['test/' + f for f in os.listdir(args.CUSTOM_SET_PATH + folder + '/test') if not os.path.isdir(args.CUSTOM_SET_PATH + folder + '/test/' + f)]
+    
+    # Load superpoints graphs
+    testlist, trainlist, validlist = [], [], []
+    for n in trainset:
+        trainlist.append(args.CUSTOM_SET_PATH + folder + '/' + n)
+    for n in testset:
+        testlist.append(args.CUSTOM_SET_PATH + folder + '/' + n)
+           
+    return tnt.dataset.ListDataset(trainlist,
+                                   functools.partial(graph_loader, train=True, args=args, db_path=args.ROOT_PATH)), \
+           tnt.dataset.ListDataset(testlist,
+                                   functools.partial(graph_loader, train=False, args=args, db_path=args.ROOT_PATH))
+
 def dataset(args):
         # Decide on the dataset
     if args.dataset=='s3dis':
@@ -151,26 +252,37 @@ def dataset(args):
 
 def embed(args):
     random.seed(0)  
-    root = args.ROOT_PATH+'/'
-    folder_hierarchy = FolderHierachy(args.odir, args.dataset, root, args.cvfold)
+    #folder_hierarchy = FolderHierachy(args.odir, args.dataset, root, args.cvfold)
+    pathManager = PathManager(args)
+    color = ColorLabelManager()
+    folder_hierarchy = FolderHierachy(pathManager.rootPath)
+
+    " Dirty fix in order to keep arguments coherent in the rest of the code "
+    " Need refactor but args is propagate all hover the code "
+    args.CUSTOM_SET_PATH = pathManager.rootPath
+
 
     # Save command line arguments
-    with open(os.path.join(folder_hierarchy.outputdir, 'cmdline.txt'), 'w') as f:
-        f.write(" ".join(["'"+a+"'" if (len(a)==0 or a[0]!='-') else a for a in sys.argv]))
+    #with open(os.path.join(folder_hierarchy.outputdir, 'cmdline.txt'), 'w') as f:
+    #    f.write(" ".join(["'"+a+"'" if (len(a)==0 or a[0]!='-') else a for a in sys.argv]))
     
-    if (args.dataset=='sema3d' and args.db_test_name.startswith('test')) or (args.dataset.startswith('s3dis_02') and args.cvfold==2):
+    #if (args.dataset=='sema3d' and args.db_test_name.startswith('test')) or (args.dataset.startswith('s3dis_02') and args.cvfold==2):
         # very large graphs
-        torch.backends.cudnn.enabled = False
+    #    torch.backends.cudnn.enabled = False
+    torch.backends.cudnn.enabled = False
     
-    dbinfo, create_dataset = dataset(args) 
+    import custom_dataset
+    dbinfo = custom_dataset.get_info(args)
+    print("Read dataset")
 
     # Create model and optimizer
     if args.resume != '':
         if args.resume=='RESUME': 
             if os.path.isfile(folder_hierarchy.model_path):
-                args.resume = folder_hierarchy.model_path
+                args.resume = pathManager.rootPath + "/supervised_superpoint_graphs/model.pth.tar" 
             else:
                 raise NameError('Cant find pretrained model')
+        print("Resume model")
         model, optimizer, stats = resume(args)
     else:
         model = create_model(args)
@@ -312,8 +424,22 @@ def embed(args):
                 
             if logging.getLogger().getEffectiveLevel() > logging.DEBUG: loader = tqdm(loader, ncols=100)
     
-    # iterate over dataset in batches
+            # iterate over dataset in batches
             for bidx, (fname, edg_source, edg_target, is_transition, labels, objects, clouds_data, xyz) in enumerate(loader):
+
+                # This step convert an array with just the label of each point into a 2D array with the number of each point for each label
+                # I add this because output of pruned function return a 2D array for labels
+                # BUT we never use the prune function for labels, we labelize a pruned cloud directly
+                # So we add this in order to simulate the prune output
+                # Note: the save of the ouput of a pruned labelised cloud is BUGGED (but we don't use it for now)
+                # Note: this add can break some things, cause we loose informations, like the number of points in each voxels, in this fix
+                    # we juste add 1 to the right class
+                labels = labels[0]
+                convertLabel = np.zeros((len(labels), color.nbColor+1))# +1 because there is the "no label" label
+                for i in range(len(labels)):
+                    convertLabel[i, labels[i]+1] = 1
+
+                labels = convertLabel
 
                 if args.cuda:
                     is_transition = is_transition.to('cuda',non_blocking=True)
@@ -322,10 +448,12 @@ def embed(args):
                     clouds, clouds_global, nei = clouds_data
                     clouds_data = (clouds.to('cuda',non_blocking=True),clouds_global.to('cuda',non_blocking=True),nei) 
                 
-                if args.dataset=='sema3d':
-                    embeddings = ptnCloudEmbedder.run_batch_cpu(model, *clouds_data, xyz)
-                else:
-                    embeddings = ptnCloudEmbedder.run_batch(model, *clouds_data, xyz)
+                #if args.dataset=='sema3d':
+                #    embeddings = ptnCloudEmbedder.run_batch_cpu(model, *clouds_data, xyz)
+                #else:
+                #    embeddings = ptnCloudEmbedder.run_batch(model, *clouds_data, xyz)
+                embeddings = ptnCloudEmbedder.run_batch_cpu(model, *clouds_data, xyz)
+                #embeddings = ptnCloudEmbedder.run_batch(model, *clouds_data, xyz)
                 
                 diff = compute_dist(embeddings, edg_source, edg_target, args.dist_type)
                     
@@ -352,6 +480,12 @@ def embed(args):
                     except OSError:
                         pass
                     write_spg(spg_file, graph_sp, pred_components, pred_in_component)
+                    parseFile = os.path.join(folder_hierarchy.spg_folder + "/../parsed", fname[0])
+                    if os.path.isfile(parseFile) and not args.overwrite :
+                        print(tab + "Reading the existing parsed file...")
+                    else:
+                        featureFile = os.path.join(folder_hierarchy.spg_folder + "/../features_supervized", fname[0])
+                        parseCloudForPointNET(featureFile, spg_file, parseFile)
 
                     # Debugging purpose - write the embedding file and an exemple of scalar files
                     # if bidx % 0 == 0:

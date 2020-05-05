@@ -219,6 +219,10 @@ for folder in pathManager.folders:
                     xyz, rgb, labels = reduceDensity(xyz, args.voxel_width, rgb, labels, n_labels)
 
                 print(tab + "Save reduced density")
+                # BUG HERE !!
+                # Because labels returned by prune algorithme is a 2D vector
+                # With for each voxel the number of point of each label
+                # So label.flatten() return to much information you need to determine the majoritary label
                 write_ply(voxelisedFile, xyz, rgb, labels.flatten())
 
             if colors.aggregation:

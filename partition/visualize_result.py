@@ -30,6 +30,7 @@ parser.add_argument('ROOT_PATH', help='Folder name which contains data')
 parser.add_argument('predFileName', help='Name of the prediction file used, they are store at /results/ folder')
 parser.add_argument('file_path', help='Full path of file to display, from data folder, must be "test/X"')
 parser.add_argument('-ow', '--overwrite', action='store_true', help='Wether to read existing files or overwrite them')
+parser.add_argument('--supervized', action='store_true', help='Wether to read existing files or overwrite them')
 parser.add_argument('--outType', default='p', help='which cloud to output: s = superpoints, p = predictions')
 args = parser.parse_args()
 
@@ -43,6 +44,7 @@ file_name = os.path.split(args.file_path)[1]
 h5FolderPath = folder + file_name
 
 fea_file   = root + "/features/"          + folder + file_name + '.h5'
+supervized_fea_file   = root + "/features_supervized/"          + folder + file_name + '.h5'
 spg_file   = root + "/superpoint_graphs/" + folder + file_name + '.h5'
 res_file   = root + "/results/" + args.predFileName + '.h5'
 outPredFileName = file_name + "_pred.ply"
@@ -53,6 +55,8 @@ outSPntFileName = file_name + "_partition.ply"
 outSPntFile   = root + "/visualisation/superpoints/" + outSPntFileName 
 Path(root + "/visualisation/superpoints/" + args.predFileName).mkdir(parents=True, exist_ok=True)
 
+if args.supervized:
+    fea_file = supervized_fea_file
 
 if not os.path.isfile(fea_file) :
     raise ValueError("%s does not exist and is needed" % fea_file)
@@ -85,7 +89,8 @@ if outPredictions:
 
 if outSuperpoints:
     if checkIfExist(outSPntFile, outSPntFileName):
-        provider.partition2ply(outSPntFile, xyz, components)
+        if args.supervized:
+            provider.partition2ply(outSPntFile, xyz, components)
 
 #if bool(args.upsample):
 #    if args.dataset=='s3dis':

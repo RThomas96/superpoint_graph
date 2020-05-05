@@ -10,24 +10,36 @@ class FolderHierachy:
     SCALAR_FOLDER = "scalars"
     MODEL_FILE = "model.pth.tar"
 
-    def __init__(self,outputdir,dataset_name,root_dir,cv_fold):
+    def __init__(self, root_dir):
         self._root = root_dir
-        if dataset_name=='s3dis':
-            self._outputdir = os.path.join(outputdir,'cv' + str(cv_fold))
-            self._folders = ["Area_1/", "Area_2/", "Area_3/", "Area_4/", "Area_5/", "Area_6/"]
-        elif dataset_name=='sema3d':
-            self._outputdir = os.path.join(outputdir,'best')
-            self._folders  = ["train/", "test_reduced/", "test_full/"]
-        elif dataset_name=='vkitti':
-            self._outputdir = os.path.join(outputdir, 'cv' + str(cv_fold))
-            self._folders  = ["01/", "02/", "03/", "04/", "05/", "06/"]
-        
-        if not os.path.exists(self._outputdir):
-            os.makedirs(self._outputdir)
+
+        self._outputdir = root_dir + "/supervised_superpoint_graphs" 
+        if not os.path.isdir(self._outputdir): os.mkdir(self.outputdir)
+
+        self._folders = ["test/", "train/"]
 
         self._spg_folder = self._create_folder(self.SPG_FOLDER)
         self._emb_folder = self._create_folder(self.EMBEDDINGS_FOLDER)
         self._scalars = self._create_folder(self.SCALAR_FOLDER)   
+
+    #def __oldinit__(self,outputdir,dataset_name,root_dir,cv_fold):
+    #    self._root = root_dir
+    #    if dataset_name=='s3dis':
+    #        self._outputdir = os.path.join(outputdir,'cv' + str(cv_fold))
+    #        self._folders = ["Area_1/", "Area_2/", "Area_3/", "Area_4/", "Area_5/", "Area_6/"]
+    #    elif dataset_name=='sema3d':
+    #        self._outputdir = os.path.join(outputdir,'best')
+    #        self._folders  = ["train/", "test_reduced/", "test_full/"]
+    #    elif dataset_name=='vkitti':
+    #        self._outputdir = os.path.join(outputdir, 'cv' + str(cv_fold))
+    #        self._folders  = ["01/", "02/", "03/", "04/", "05/", "06/"]
+    #    
+    #    if not os.path.exists(self._outputdir):
+    #        os.makedirs(self._outputdir)
+
+    #    self._spg_folder = self._create_folder(self.SPG_FOLDER)
+    #    self._emb_folder = self._create_folder(self.EMBEDDINGS_FOLDER)
+    #    self._scalars = self._create_folder(self.SCALAR_FOLDER)   
 
     @property
     def outputdir(self): return self._outputdir

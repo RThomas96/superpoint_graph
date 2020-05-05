@@ -17,11 +17,18 @@ import functools
 import argparse
 from sklearn.linear_model import RANSACRegressor
 from plyfile import PlyData, PlyElement
+from datetime import datetime
+import time
 
 DIR_PATH = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(0, os.path.join(DIR_PATH, '..'))
 sys.path.insert(0, DIR_PATH)
 sys.path.append(os.path.join(DIR_PATH,"../partition/cut-pursuit/build/src"))
+sys.path.append("./utils")
+
+from colorLabelManager import ColorLabelManager
+from pathManager import PathManager
+from reportManager import ReportManager
 
 from partition.ply_c import libply_c
 import libcp
@@ -30,11 +37,41 @@ from learning.spg import augment_cloud
 from partition.graphs import *
 from partition.provider import *
 
+def mkdirIfNotExist(dir):
+    if not os.path.isdir(dir): os.mkdir(dir)
+
+def writePly(file, xyz, rgb, labels):
+    if len(labels) > 0:
+        write_ply_labels(file, xyz, rgb, labels)
+    else :
+        write_ply(file, xyz, rgb)
+
+def storePreviousFile(fileFullName, timeStamp):
+    if(os.path.isfile(fileFullName)):
+        fileName   = os.path.splitext(os.path.basename(fileFullName))[0]
+        rootPath = os.path.dirname(fileFullName)
+        logPath = rootPath + "/log"
+        if not os.path.isdir(logPath):
+            os.mkdir(logPath)
+        newName = logPath + "/{}{}.log.h5".format(fileName, timeStamp)
+        shutil.move(fileFullName, newName)
+        print("Store previous file at {}...".format(newName))
+
+def reduceDensity(xyz, voxel_width, rgb, labels, n_labels):
+    asNoLabel = False
+    if len(labels) == 0:
+        asNoLabel = True
+        labels = np.array([]) 
+        n_labels = 0
+    xyz, rgb, labels, dump = libply_c.prune(xyz, args.voxel_width, rgb, labels, np.zeros(1, dtype='uint8'), n_labels, 0)
+    if asNoLabel:
+        labels = np.array([]) 
+    return xyz, rgb, labels
+
 def main():
     parser = argparse.ArgumentParser(description='Large-scale Point Cloud Semantic Segmentation with Superpoint Graphs')
     
-    parser.add_argument('--ROOT_PATH', default='datasets/s3dis')
-    parser.add_argument('--dataset', default='s3dis')
+    parser.add_argument('ROOT_PATH', default='datasets/s3dis')
     #parameters
     parser.add_argument('--compute_geof', default=1, type=int, help='compute hand-crafted features of the local geometry')
     parser.add_argument('--k_nn_local', default=20, type=int, help='number of neighbors to describe the local geometry')
@@ -43,134 +80,132 @@ def main():
     parser.add_argument('--plane_model', default=1, type=int, help='uses a simple plane model to derive elevation')
     parser.add_argument('--use_voronoi', default=0.0, type=float, help='uses the Voronoi graph in combination to knn to build the adjacency graph, useful for sparse aquisitions. If 0., do not use voronoi. If >0, then is the upper length limit for an edge to be kept. ')
     parser.add_argument('--ver_batch', default=5000000, type=int, help='batch size for reading large files')
+    parser.add_argument('-ow', '--overwrite', action='store_true', help='Wether to read existing files or overwrite them')
+    parser.add_argument('--save', action='store_true', help='Wether to read existing files or overwrite them')
     args = parser.parse_args()
     
-    #path to data
-    if args.ROOT_PATH[-1]=='/':
-        root = args.ROOT_PATH
-    else:
-        root = args.ROOT_PATH+'/'
-        
-    if not os.path.exists(root + 'features_supervision'):
-        os.makedirs(root + 'features_supervision')
+    if(args.overwrite):
+        print("Warning: files will be overwritten !!")
     
-    #list of subfolders to be processed
-    if args.dataset == 's3dis':
-        folders = ["Area_1/", "Area_2/", "Area_3/", "Area_4/", "Area_5/", "Area_6/"]
-        n_labels = 13
-    elif args.dataset == 'sema3d':
-        folders = ["train/", "test_reduced/", "test_full/"]
-        n_labels = 8
-    elif args.dataset == 'vkitti':
-        folders = ["01/", "02/","03/", "04/","05/", "06/"]
-        n_labels = 13 #number of classes
-    elif args.dataset == 'custom_dataset':
-        folders = ["train/", "test/"]
-        n_labels = 10 #number of classes
-    else:
-        raise ValueError('%s is an unknown data set' % args.dataset)
+    timeStamp = datetime.now().strftime("-%d-%m-%Y-%H:%M:%S")
+    
+    colors = ColorLabelManager()
+    n_labels = colors.nbColor
+    pathManager = PathManager(args)
+    #reportManager = ReportManager(pathManager.rootPath, args)
+    
+    times = [0.,0.,0.,0.] # Time for computing: features / partition / spg
 
     pruning = args.voxel_width > 0
     #------------------------------------------------------------------------------
-    for folder in folders:
+    for folder in pathManager.folders:
         print("=================\n   "+folder+"\n=================")
-        data_folder = root + "data/"              + folder
-        str_folder  = root + "features_supervision/"  + folder
-        
-        if not os.path.isdir(data_folder):
-            raise ValueError("%s does not exist" % data_folder)
-           # os.mkdir(data_folder)
-        if not os.path.isdir(str_folder):
-            os.mkdir(str_folder)
-            
-        if args.dataset == 's3dis':
-            files = [os.path.join(data_folder, o) for o in os.listdir(data_folder) 
-                        if os.path.isdir(os.path.join(data_folder,o))]
-        elif args.dataset == 'sema3d':
-            files = glob.glob(data_folder + "*.txt")
-        elif args.dataset == 'vkitti':
-            files = glob.glob(data_folder + "*.npy")
-            
-        if (len(files) == 0):
-            continue
-            #raise ValueError('%s is empty' % data_folder)
-        n_files = len(files)
-        i_file = 0
-        for file in files:
-            file_name = os.path.splitext(os.path.basename(file))[0]
-            if args.dataset=='s3dis':
-                data_file   = data_folder + file_name + '/' + file_name + ".txt"
-                str_file    = str_folder       + file_name + '.h5'
-            elif args.dataset=='sema3d':
-                file_name_short = '_'.join(file_name.split('_')[:2])
-                data_file  = data_folder + file_name + ".txt"
-                label_file = data_folder + file_name + ".labels"
-                str_file    = str_folder + file_name_short + '.h5'
-            elif args.dataset=='vkitti':
-                data_file   = data_folder + file_name + ".npy"
-                str_file    = str_folder  + file_name + '.h5'
-            i_file = i_file + 1
-            print(str(i_file) + " / " + str(n_files) + "---> "+file_name)
-            if os.path.isfile(str_file):
-                print("    graph structure already computed - delete for update...")
+
+        for i, fileName in enumerate(pathManager.allDataFileName[folder]):
+
+            n_labels = colors.nbColor
+            dataFolder = pathManager.rootPath + "/data/raw/" + folder + "/" 
+            dataFile = dataFolder + fileName + '.ply' #or .las
+
+            featureFile  = pathManager.rootPath + "/features_supervized/" + folder + "/" + fileName + ".h5" 
+            spgFile  = pathManager.rootPath + "/superpoint_graphs/" + folder + "/" + fileName + ".h5" 
+            parseFile  = pathManager.rootPath + "/parsed/" + folder + "/" + fileName + ".h5"
+
+            voxelisedFile  = pathManager.rootPath + "/data/voxelised/" + folder + "/" + fileName + "/" + fileName + "-prunned" + str(args.voxel_width).replace(".", "-") + ".ply"
+
+            for sub in ["/features_supervized", "/superpoint_graphs", "/parsed"] : 
+                mkdirIfNotExist(pathManager.rootPath + sub)
+                for subsub in ["/test", "/train"] : 
+                    mkdirIfNotExist(pathManager.rootPath + sub + subsub)
+            mkdirIfNotExist(pathManager.rootPath + "/reports")
+
+            print(str(i + 1) + " / " + str(len(pathManager.allDataFileName[folder])) + " ---> "+fileName)
+            tab="   "
+            if os.path.isfile(featureFile) and not args.overwrite :
+                print(tab + "Reading the existing feature file...")
+                print("Nothing to do")
             else:
+                if args.save:
+                    storePreviousFile(featureFile, timeStamp)
                 #--- build the geometric feature file h5 file ---
                 print("    computing graph structure...")
                 #--- read the data files and compute the labels---
-                if args.dataset == 's3dis':
-                    xyz, rgb, labels, objects = read_s3dis_format(data_file)
-                    if pruning:
-                        n_objects = int(objects.max()+1)
-                        xyz, rgb, labels, objects = libply_c.prune(xyz, args.voxel_width, rgb, labels, objects, n_labels, n_objects)
-                        #hard_labels = labels.argmax(axis=1)
-                        objects = objects[:,1:].argmax(axis=1)+1
-                    else: 
-                    #hard_labels = labels
-                        objects = objects
-                elif args.dataset=='sema3d':
-                    has_labels = (os.path.isfile(label_file))
-                    if (has_labels):
-                        xyz, rgb, labels = read_semantic3d_format(data_file, n_labels, label_file, args.voxel_width, args.ver_batch)
-                    else:
-                        xyz, rgb = read_semantic3d_format(data_file, 0, '', args.voxel_width, args.ver_batch)
-                        labels = np.array([0])
-                        objects = np.array([0])
-                        is_transition = np.array(False)
-                elif args.dataset == 'vkitti':
-                    xyz, rgb, labels = read_vkitti_format(data_file)
-                    if pruning:
-                        xyz, rgb, labels, o = libply_c.prune(xyz.astype('f4'), args.voxel_width, rgb.astype('uint8'), labels.astype('uint8'), np.zeros(1, dtype='uint8'), n_labels, 0)
-                    #---compute nn graph-------
+                # OBJECTS seems to be important
+                #if args.dataset == 's3dis':
+                #    xyz, rgb, labels, objects = read_s3dis_format(data_file)
+                #    if pruning:
+                #        n_objects = int(objects.max()+1)
+                #        xyz, rgb, labels, objects = libply_c.prune(xyz, args.voxel_width, rgb, labels, objects, n_labels, n_objects)
+                #        #hard_labels = labels.argmax(axis=1)
+                #        objects = objects[:,1:].argmax(axis=1)+1
+                #    else: 
+                #    #hard_labels = labels
+                #        objects = objects
+
+                #--- build the geometric feature file h5 file ---
+                start = time.perf_counter()
+                if os.path.isfile(voxelisedFile):
+                    print("Voxelised file found, voxelisation step skipped")
+                    print("Read voxelised file")
+                    xyz, rgb, labels, objects = read_ply(voxelisedFile)
+                    if len(labels) == 0:
+                        print("No labels found")
+                        n_labels = 0
+                    else :
+                        print("Labels found")
+                else :
+                    print(tab + "Read {}".format(fileName))
+                    xyz, rgb, labels, objects = read_ply(dataFile)
+                    if len(labels) == 0:
+                        print("No labels found")
+                        n_labels = 0
+                    else :
+                        print("Labels found")
+
+                    end = time.perf_counter()
+                    times[0] = times[0] + end - start
+                    #---Voxelise to reduce density-------
+                    print(tab + "Reduce point density")
+                    if args.voxel_width > 0:
+                        xyz, rgb, labels = reduceDensity(xyz, args.voxel_width, rgb, labels, n_labels)
+
+                    print(tab + "Save reduced density")
+                    writePly(voxelisedFile, xyz, rgb, labels.flatten())
+
+                if colors.aggregation:
+                    colors.aggregateLabels(labels)
+                else:
+                    labels = np.array([label+1 for label in labels])
+                
+                start = time.perf_counter()
+
+                #---compute nn graph-------
+                print(tab + "Compute both {}_nn and {}_nn graphs...".format(args.k_nn_adj, args.k_nn_local))
                 n_ver = xyz.shape[0]    
                 print("computing NN structure")
                 graph_nn, local_neighbors = compute_graph_nn_2(xyz, args.k_nn_adj, args.k_nn_local, voronoi = args.use_voronoi)
                 
-                if args.dataset=='s3dis':
-                    is_transition = objects[graph_nn["source"]]!=objects[graph_nn["target"]]
-                elif args.dataset=='sema3d' and has_labels:
-                    #sema has no object, we make them ourselves with label inpainting
-                    hard_labels = np.argmax(labels[:,1:], 1)+1
-                    no_labels = (labels[:,1:].sum(1)==0).nonzero()
-                    hard_labels[no_labels] = 0
-                    is_transition = hard_labels[graph_nn["source"]]!=hard_labels[graph_nn["target"]] * (hard_labels[graph_nn["source"]]!=0) \
-                    * (hard_labels[graph_nn["target"]]!=0)
-                   
-                    edg_source = graph_nn["source"][(is_transition==0).nonzero()].astype('uint32')
-                    edg_target = graph_nn["target"][(is_transition==0).nonzero()].astype('uint32')
-                    edge_weight = np.ones_like(edg_source).astype('f4')
-                    node_weight = np.ones((n_ver,),dtype='f4')
-                    node_weight[no_labels] = 0
-                    print("Inpainting labels")
-                    dump, objects = libcp.cutpursuit2(np.array(hard_labels).reshape((n_ver,1)).astype('f4'), edg_source, edg_target, edge_weight, node_weight, 0.01)
-                    is_transition = objects[graph_nn["source"]]!=objects[graph_nn["target"]]
-                elif args.dataset=='vkitti':
-                    #we define the objects as the constant connected components of the labels
-                    hard_labels = np.argmax(labels, 1)
-                    is_transition = hard_labels[graph_nn["source"]]!=hard_labels[graph_nn["target"]]
-                    
-                    dump, objects = libply_c.connected_comp(n_ver \
-                       , graph_nn["source"].astype('uint32'), graph_nn["target"].astype('uint32') \
-                       , (is_transition==0).astype('uint8'), 0)
+                print("Compute features for embedding")
+                #their is no object, we make them ourselves with label inpainting
+                #hard_labels = np.argmax(labels[:,1:], 1)+1
+                #no_labels = (labels[:,1:].sum(1)==0).nonzero()
+                #hard_labels[no_labels] = 0
+                
+                # Because for now every points are labelised        
+                no_labels = []
+                hard_labels = labels
+                #hard_labels = np.argmax(labels[:,1:], 1)
+                is_transition = hard_labels[graph_nn["source"]]!=hard_labels[graph_nn["target"]] * (hard_labels[graph_nn["source"]]!=0) \
+                * (hard_labels[graph_nn["target"]]!=0)
+                
+                edg_source = graph_nn["source"][(is_transition==0).nonzero()].astype('uint32')
+                edg_target = graph_nn["target"][(is_transition==0).nonzero()].astype('uint32')
+                edge_weight = np.ones_like(edg_source).astype('f4')
+                node_weight = np.ones((n_ver,),dtype='f4')
+                node_weight[no_labels] = 0
+                print("Inpainting labels")
+                dump, objects = libcp.cutpursuit2(np.array(hard_labels).reshape((n_ver,1)).astype('f4'), edg_source, edg_target, edge_weight, node_weight, 0.01)
+                is_transition = objects[graph_nn["source"]]!=objects[graph_nn["target"]]
                     
                 if (args.compute_geof):
                     geof = libply_c.compute_geof(xyz, local_neighbors, args.k_nn_local).astype('float32')
@@ -189,7 +224,7 @@ def main():
                 ma, mi = np.max(xyz[:,:2],axis=0,keepdims=True), np.min(xyz[:,:2],axis=0,keepdims=True)
                 xyn = (xyz[:,:2] - mi) / (ma - mi + 1e-8) #global position
                     
-                write_structure(str_file, xyz, rgb, graph_nn, local_neighbors.reshape([n_ver, args.k_nn_local]), \
+                write_structure(featureFile, xyz, rgb, graph_nn, local_neighbors.reshape([n_ver, args.k_nn_local]), \
                     is_transition, labels, objects, geof, elevation, xyn)
                     
 #------------------------------------------------------------------------------

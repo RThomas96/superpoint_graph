@@ -142,6 +142,7 @@ def main():
     " Dirty fix in order to keep arguments coherent in the rest of the code "
     " Need refactor but args is propagate all hover the code "
     args.CUSTOM_SET_PATH = pathManager.rootPath
+    args.supervized = 0
 
     print('Will save model to ' + modelDir)
 
