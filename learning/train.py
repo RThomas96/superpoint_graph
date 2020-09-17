@@ -132,7 +132,7 @@ def main():
     args.sp_decoder_config = ast.literal_eval(args.sp_decoder_config)
     args.ptn_widths_stn = ast.literal_eval(args.ptn_widths_stn)
 
-    pathManager = PathManager(args, "laz")
+    pathManager = PathManager(args)
     outDir = pathManager.rootPath + "/results"
     modelDir = pathManager.rootPath + "/pretrained"
 

@@ -388,6 +388,14 @@ def read_semantic3d_format2(data_file, n_class, file_label_path, voxel_width, ve
         return xyz, rgb, labels
     else:
         return xyz, rgb
+
+#------------------------------------------------------------------------------
+def read_file(filename, extension):
+    if extension == "laz":
+        return read_laz(filename)
+    else:
+        return read_ply(filename)
+
 #------------------------------------------------------------------------------
 def read_ply(filename):
     """convert from a ply file. include the label and the object number"""

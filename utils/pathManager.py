@@ -2,7 +2,7 @@ import os
 from glob import glob
 
 class PathManager : 
-    def __init__(self, args, dataType="ply"):
+    def __init__(self, args):
         self.rootPath = os.path.dirname(os.path.realpath(__file__)) + '/../projects/' + args.ROOT_PATH
         if not os.path.isdir(self.rootPath):
             raise NameError('The root subfolder you indicate doesn\'t exist')
@@ -14,16 +14,27 @@ class PathManager :
         self.folders = ["test", "train"]
 
         self.allDataFileName = {}
+        self.allDataFileType = {}
         for folder in self.folders:
             dataPath = dataFolder + folder
             self.allDataFileName[folder] = []
+            self.allDataFileType[folder] = []
             try:
-                allDataFiles = glob(dataPath + "/*."+ dataType)
+                allDataLazFiles = glob(dataPath + "/*.laz")
+                allDataPlyFiles = glob(dataPath + "/*.ply")
             except OSError:
                 print("{} do not exist ! It is needed and contain input point clouds.".format(dataPath))
-            for dataFile in allDataFiles:
+
+            for dataFile in allDataLazFiles:
                 dataName = os.path.splitext(os.path.basename(dataFile))[0]
                 self.allDataFileName[folder].append(dataName)
+                self.allDataFileType[folder].append("laz")
+
+            for dataFile in allDataPlyFiles:
+                dataName = os.path.splitext(os.path.basename(dataFile))[0]
+                self.allDataFileName[folder].append(dataName)
+                self.allDataFileType[folder].append("ply")
+
             if len(self.allDataFileName[folder]) <= 0:
-                print("Warning: {} folder is empty or do not contain {} format file".format(folder, dataType))
+                print("Warning: {} folder is empty or do not contain laz or ply format file".format(folder))
                 #raise FileNotFoundError("Data folder is empty or do not contain {} format files".format(dataType))
