@@ -51,7 +51,7 @@ colorManager = ColorLabelManager()
 
 times = [0.,0.,0.,0.] # Time for computing: features / partition / spg
 
-scriptPath = os.path.dirname(os.path.abspath(__file__)) + "/../" + args.ROOT_PATH
+scriptPath = os.path.dirname(os.path.abspath(__file__)) + "/../projects/" + args.ROOT_PATH
 print("scriptPath = " + scriptPath)
 voxelisedPath = scriptPath + "/data/voxelised"
 voxelisedPath = voxelisedPath + "/test" if os.path.isdir(voxelisedPath + "/test/" + args.fileName) else voxelisedPath + "/train"
@@ -78,7 +78,10 @@ labels = np.zeros(len(rgb))
 rgbToLabel = colorManager.colorDict 
 for i, color in enumerate(rgb):
     key = str(color[0])+str(color[1])+str(color[2])
-    labels[i] = (rgbToLabel[key])
+    try:
+        labels[i] = (rgbToLabel[key])
+    except KeyError:
+        labels[i] = -1 
 
 print("Reading original file")
 xyz_up, rgb_up, labels_up, objects_up = provider.read_ply(originalFile)

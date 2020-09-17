@@ -32,11 +32,7 @@ import provider
 # from graphs import *
 # from provider import *
 
-def write_ply(file, xyz, rgb, labels):
-    if len(labels) > 0:
-        provider.write_ply_labels(file, xyz, rgb, labels)
-    else :
-        provider.write_ply(file, xyz, rgb)
+# from pudb import set_trace; set_trace()
 
 def parseCloudForPointNET(featureFile, graphFile, parseFile):
     """ Preprocesses data by splitting them by components and normalizing."""
@@ -150,9 +146,17 @@ if(args.overwrite):
 
 timeStamp = datetime.now().strftime("-%d-%m-%Y-%H:%M:%S")
 
+# TODO
+lazFile = True
+if lazFile:
+    dataType = "laz"
+else:
+    dataType = "ply"
+
+
 colors = ColorLabelManager()
 n_labels = colors.nbColor
-pathManager = PathManager(args)
+pathManager = PathManager(args, dataType)
 reportManager = ReportManager(pathManager.rootPath, args)
 
 times = [0.,0.,0.,0.] # Time for computing: features / partition / spg
@@ -165,13 +169,19 @@ for folder in pathManager.folders:
 
         n_labels = colors.nbColor
         dataFolder = pathManager.rootPath + "/data/raw/" + folder + "/" 
-        dataFile = dataFolder + fileName + '.ply' #or .las
+        if lazFile :
+            dataFile = dataFolder + fileName + '.laz'
+        else :
+            dataFile = dataFolder + fileName + '.ply'
 
         featureFile  = pathManager.rootPath + "/features/" + folder + "/" + fileName + ".h5" 
         spgFile  = pathManager.rootPath + "/superpoint_graphs/" + folder + "/" + fileName + ".h5" 
         parseFile  = pathManager.rootPath + "/parsed/" + folder + "/" + fileName + ".h5"
 
-        voxelisedFile  = pathManager.rootPath + "/data/voxelised/" + folder + "/" + fileName + "/" + fileName + "-prunned" + str(args.voxel_width).replace(".", "-") + ".ply"
+        if lazFile:
+            voxelisedFile  = pathManager.rootPath + "/data/voxelised/" + folder + "/" + fileName + "/" + fileName + "-prunned" + str(args.voxel_width).replace(".", "-") + ".laz"
+        else:
+            voxelisedFile  = pathManager.rootPath + "/data/voxelised/" + folder + "/" + fileName + "/" + fileName + "-prunned" + str(args.voxel_width).replace(".", "-") + ".ply"
 
         for sub in ["/features", "/superpoint_graphs", "/parsed"] : 
             mkdirIfNotExist(pathManager.rootPath + sub)
@@ -196,16 +206,30 @@ for folder in pathManager.folders:
             if os.path.isfile(voxelisedFile):
                 print("Voxelised file found, voxelisation step skipped")
                 print("Read voxelised file")
-                xyz, rgb, labels, objects = provider.read_ply(voxelisedFile)
-                if len(labels) == 0:
+                if lazFile:
+                    xyz, rgb, labels, objects = provider.read_laz(voxelisedFile)
+                else:
+                    xyz, rgb, labels, objects = provider.read_ply(voxelisedFile)
+
+                if lazFile == False and len(labels) == 0:
+                    print("No labels found")
+                    n_labels = 0
+                elif lazFile and labels.sum() == 0:
                     print("No labels found")
                     n_labels = 0
                 else :
                     print("Labels found")
             else :
                 print(tab + "Read {}".format(fileName))
-                xyz, rgb, labels, objects = provider.read_ply(dataFile)
-                if len(labels) == 0:
+                if lazFile:
+                    xyz, rgb, labels, objects = provider.read_laz(dataFile)
+                else:
+                    xyz, rgb, labels, objects = provider.read_ply(dataFile)
+
+                if lazFile == False and len(labels) == 0:
+                    print("No labels found")
+                    n_labels = 0
+                elif lazFile and labels.sum() == 0:
                     print("No labels found")
                     n_labels = 0
                 else :
@@ -223,7 +247,11 @@ for folder in pathManager.folders:
                 # Because labels returned by prune algorithme is a 2D vector
                 # With for each voxel the number of point of each label
                 # So label.flatten() return to much information you need to determine the majoritary label
-                write_ply(voxelisedFile, xyz, rgb, labels.flatten())
+                if lazFile:
+                    extension = "laz"
+                else:
+                    extension = "ply"
+                provider.write_file(voxelisedFile, xyz, rgb, labels.flatten(), extension)
 
             if colors.aggregation:
                 colors.aggregateLabels(labels)

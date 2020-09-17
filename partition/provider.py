@@ -19,6 +19,7 @@ import h5py
 from sklearn.neighbors import NearestNeighbors
 sys.path.append("./utils")
 
+import pdal # For laz reading
 from colorLabelManager import ColorLabelManager
 
 
@@ -27,6 +28,8 @@ sys.path.insert(0, os.path.join(DIR_PATH, '..'))
 from partition.ply_c import libply_c
 import colorsys
 from sklearn.decomposition import PCA
+
+from pudb import set_trace 
 #------------------------------------------------------------------------------
 def partition2ply(filename, xyz, components):
     """write a ply with random colors for each components"""
@@ -412,6 +415,37 @@ def read_ply(filename):
         except ValueError:
             return xyz, rgb, [], []
 #------------------------------------------------------------------------------
+def read_laz(filename):
+
+    # The filter for PDAL, in json format
+    json = """
+    [
+        {
+            "type":"readers.las",
+            "filename":"%s"
+        }
+    ]
+    """ % (filename)
+
+    pipeline = pdal.Pipeline(json)
+    count = pipeline.execute()
+    arrays = np.array(pipeline.arrays)
+
+    x = np.reshape(arrays['X'], (count,1))
+    y = np.reshape(arrays['Y'], (count,1))
+    z = np.reshape(arrays['Z'], (count,1))
+
+    r = np.reshape(arrays['Red'], (count,1))
+    g = np.reshape(arrays['Green'], (count,1))
+    b = np.reshape(arrays['Blue'], (count,1))
+
+    labels = np.reshape(arrays['Classification'], (count,1))
+
+    xyz = np.hstack((x,y,z)).astype('f4')
+    rgb = np.hstack((r,g,b)).astype('u1')
+    #rgb = rgb/255
+    return xyz, rgb, labels, [] 
+#------------------------------------------------------------------------------
 def read_las(filename):
     """convert from a las file with no rgb"""
     #---read the ply file--------
@@ -494,10 +528,25 @@ def edge_class2ply2(filename, edg_class, xyz, edg_source, edg_target):
     ply.write(filename)
     
 #------------------------------------------------------------------------------
+def write_file(filename, xyz, rgb, labels, extension):
+    if extension == "laz":
+        write_laz(filename, xyz, rgb, labels)
+    else:
+        write_ply(filename, xyz, rgb, labels)
+
+#------------------------------------------------------------------------------
+def write_ply(file, xyz, rgb, labels):
+    if len(labels) > 0:
+        provider.write_ply_labels(file, xyz, rgb, labels)
+    else :
+        provider.write_ply(file, xyz, rgb)
+
+#------------------------------------------------------------------------------
 def write_ply_labels(filename, xyz, rgb, labels):
     """write into a ply file. include the label"""
+    """ Label type is f4 cause u1 cannot write -1 value, at it is used for unknown label """
     prop = [('x', 'f4'), ('y', 'f4'), ('z', 'f4'), ('red', 'u1'), ('green', 'u1')
-            , ('blue', 'u1'), ('label', 'u1')]
+            , ('blue', 'u1'), ('label', 'f4')]
     vertex_all = np.empty(len(xyz), dtype=prop)
     for i_prop in range(0, 3):
         vertex_all[prop[i_prop][0]] = xyz[:, i_prop]
@@ -506,6 +555,7 @@ def write_ply_labels(filename, xyz, rgb, labels):
     vertex_all[prop[6][0]] = labels
     ply = PlyData([PlyElement.describe(vertex_all, 'vertex')], text=True)
     ply.write(filename)
+
 #------------------------------------------------------------------------------
 def write_ply(filename, xyz, rgb):
     """write into a ply file"""
@@ -517,6 +567,77 @@ def write_ply(filename, xyz, rgb):
         vertex_all[prop[i_prop+3][0]] = rgb[:, i_prop]
     ply = PlyData([PlyElement.describe(vertex_all, 'vertex')], text=True)
     ply.write(filename)
+
+#------------------------------------------------------------------------------
+def write_laz(file, xyz, rgb, labels):
+    if np.sum(labels) > 0:
+        write_laz_labels(file, xyz, rgb, labels)
+    else :
+        write_laz_simple(file, xyz, rgb)
+
+#------------------------------------------------------------------------------
+def write_laz_labels(filename, xyz, rgb, labels):
+    """write into a laz file"""
+    prop = [('X', 'f4'), ('Y', 'f4'), ('Z', 'f4'), ('Red', 'u1'), ('Green', 'u1')
+            , ('Blue', 'u1'), ('Classification', 'f4')]
+    vertex_all = np.empty(len(xyz), dtype=prop)
+    for i_prop in range(0, 3):
+        vertex_all[prop[i_prop][0]] = xyz[:, i_prop]
+    for i_prop in range(0, 3):
+        vertex_all[prop[i_prop+3][0]] = rgb[:, i_prop] /255
+    vertex_all[prop[6][0]] = labels
+
+    # Write our data to an LAZ file
+    output =u"""{
+      "pipeline":[
+        {
+          "type":"writers.las",
+          "filename":"%s",
+          "offset_x":"auto",
+          "offset_y":"auto",
+          "offset_z":"auto",
+          "scale_x":0.00000001,
+          "scale_y":0.00000001,
+          "scale_z":0.00000001
+        }
+      ]
+    }""" % (filename)
+    
+    p = pdal.Pipeline(output, [vertex_all])
+    count = p.execute()
+
+#------------------------------------------------------------------------------
+def write_laz_simple(filename, xyz, rgb):
+    """write into a laz file"""
+    prop = [('X', '<f4'), ('Y', '<f4'), ('Z', '<f4'), ('Red', '<u1'), ('Green', '<u1')
+            , ('Blue', '<u1')]
+    vertex_all = np.empty(len(xyz), dtype=prop)
+    for i_prop in range(0, 3):
+        vertex_all[prop[i_prop][0]] = xyz[:, i_prop]
+    for i_prop in range(0, 3):
+        vertex_all[prop[i_prop+3][0]] = rgb[:, i_prop]
+
+    #ply = PlyData([PlyElement.describe(vertex_all, 'vertex')], text=True)
+
+    # Write our data to an LAZ file
+    output =u"""{
+      "pipeline":[
+        {
+          "type":"writers.las",
+          "filename":"%s",
+          "offset_x":"auto",
+          "offset_y":"auto",
+          "offset_z":"auto",
+          "scale_x":0.00000001,
+          "scale_y":0.00000001,
+          "scale_z":0.00000001
+        }
+      ]
+    }""" % (filename)
+    
+    p = pdal.Pipeline(output, [vertex_all])
+    count = p.execute()
+
 #------------------------------------------------------------------------------
 def write_features(file_name, geof, xyz, rgb, graph_nn, labels):
     """write the geometric features, labels and clouds in a h5 file"""

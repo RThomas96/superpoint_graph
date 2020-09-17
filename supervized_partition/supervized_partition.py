@@ -75,7 +75,8 @@ def parse_args():
     parser.add_argument('--cuda', default=1, type=int, help='Bool, use cuda')
     parser.add_argument('--nworkers', default=0, type=int, help='Num subprocesses to use for data loading. 0 means that the data will be loaded in the main process')
     parser.add_argument('--test_nth_epoch', default=10, type=int, help='Test each n-th epoch during training')
-    parser.add_argument('--save_nth_epoch', default=1, type=int, help='Save model each n-th epoch during training')
+    #parser.add_argument('--test_nth_epoch', default=10, type=int, help='Test each n-th epoch during training')
+    parser.add_argument('--save_nth_epoch', default=10, type=int, help='Save model each n-th epoch during training')
     parser.add_argument('--test_multisamp_n', default=10, type=int, help='Average logits obtained over runs with different seeds')
     # Optimization arguments
     parser.add_argument('--wd', default=0, type=float, help='Weight decay')
@@ -97,6 +98,7 @@ def parse_args():
     # Point net
     parser.add_argument('--ptn_embedding', default='ptn', help='configuration of the learned cloud emebdder (ptn): uses PointNets for vertices embeddings. no other options so far :)')
     parser.add_argument('--ptn_widths', default='[[32,128], [34,32,32,4]]', help='PointNet widths')
+    #parser.add_argument('--ptn_widths', default='[[32,128], [34,32,4]]', help='PointNet widths')
     parser.add_argument('--ptn_widths_stn', default='[[16,64],[32,16]]', help='PointNet\'s Transformer widths')
     parser.add_argument('--use_color', default='rgb', help='How to use color in the local cloud embedding : rgb, lab or no')
     parser.add_argument('--ptn_nfeat_stn', default=2, type=int, help='PointNet\'s Transformer number of input features')
@@ -235,21 +237,6 @@ def create_dataset(args, test_seed_offset=0):
            tnt.dataset.ListDataset(testlist,
                                    functools.partial(graph_loader, train=False, args=args, db_path=args.ROOT_PATH))
 
-def dataset(args):
-        # Decide on the dataset
-    if args.dataset=='s3dis':
-        dbinfo = get_s3dis_info(args)
-        create_dataset = create_s3dis_datasets
-    elif args.dataset=='sema3d':
-        dbinfo = get_sema3d_info(args)
-        create_dataset = create_sema3d_datasets
-    elif args.dataset=='vkitti':
-        dbinfo = get_vkitti_info(args)
-        create_dataset = create_vkitti_datasets
-    else:
-        raise NotImplementedError('Unknown dataset ' + args.dataset)
-    return dbinfo, create_dataset
-
 def embed(args):
     random.seed(0)  
     #folder_hierarchy = FolderHierachy(args.odir, args.dataset, root, args.cvfold)
@@ -383,7 +370,8 @@ def embed(args):
                     clouds, clouds_global, nei = clouds_data
                     clouds_data = (clouds.to('cuda',non_blocking=True),clouds_global.to('cuda',non_blocking=True),nei) 
 
-                embeddings = ptnCloudEmbedder.run_batch(model, *clouds_data, xyz)
+                #embeddings = ptnCloudEmbedder.run_batch(model, *clouds_data, xyz)
+                embeddings = ptnCloudEmbedder.run_batch_cpu(model, *clouds_data, xyz)
             
                 diff = compute_dist(embeddings, edg_source, edg_target, args.dist_type)
                 

@@ -89,8 +89,7 @@ if outPredictions:
 
 if outSuperpoints:
     if checkIfExist(outSPntFile, outSPntFileName):
-        if args.supervized:
-            provider.partition2ply(outSPntFile, xyz, components)
+        provider.partition2ply(outSPntFile, xyz, components)
 
 #if bool(args.upsample):
 #    if args.dataset=='s3dis':

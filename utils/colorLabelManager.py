@@ -3,7 +3,9 @@ import os
 class ColorLabelManager:
         def __init__(self):
                 #self.filePath = os.getcwd() + "/" + os.path.dirname(__file__) + "/colorCode" 
-                self.filePath = "/home/thomas/Data/Cajun/Evaluation/Methods/superpoint_graph/utils/colorCode" 
+                #self.filePath = "/home/thomas/Data/Cajun/Evaluation/Methods/superpoint_graph/utils/colorCode" 
+                #TODO
+                self.filePath = "/home/thomas/Data/Cajun/Data/Evaluation/Methods/superpoint_graph/utils/colorCode" 
                 self.colorDict, self.labelDict, self.nameDict, self.aggregationDict = self.parseColorFile()
                 #self.nbColor = len(self.colorDict)
                 self.nbColor = len(self.aggregationDict)
