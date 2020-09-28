@@ -37,6 +37,13 @@ from learning.spg import augment_cloud
 from partition.graphs import *
 from partition.provider import *
 
+# Label check is different cause laz format always output labels
+def has_labels(labels, dataType):
+    if dataType == "laz":
+        return labels.sum() > 0
+    else:
+        return len(labels) > 0
+
 def mkdirIfNotExist(dir):
     if not os.path.isdir(dir): os.mkdir(dir)
 
@@ -82,6 +89,7 @@ def main():
     parser.add_argument('--ver_batch', default=5000000, type=int, help='batch size for reading large files')
     parser.add_argument('-ow', '--overwrite', action='store_true', help='Wether to read existing files or overwrite them')
     parser.add_argument('--save', action='store_true', help='Wether to read existing files or overwrite them')
+
     args = parser.parse_args()
     
     if(args.overwrite):
@@ -96,22 +104,33 @@ def main():
     
     times = [0.,0.,0.,0.] # Time for computing: features / partition / spg
 
-    pruning = args.voxel_width > 0
     #------------------------------------------------------------------------------
     for folder in pathManager.folders:
         print("=================\n   "+folder+"\n=================")
+        #reportManager.train = not reportManager.train
+
+        timeStamp = datetime.now().strftime("-%d-%m-%Y-%H:%M:%S")
+        # Init timestamp
+        #if args.save:
+        #    if args.timestamp:
+        #        timeStamp = datetime.now().strftime("-%d-%m-%Y-%H:%M:%S")
+        #    else:
+        #        data = np.array(pandas.read_csv(reportManager.getCsvPath(), sep=';', header=None))
+        #        timeStamp="-".join(map(str, data[-1][0:5]))
 
         for i, fileName in enumerate(pathManager.allDataFileName[folder]):
 
             n_labels = colors.nbColor
-            dataFolder = pathManager.rootPath + "/data/raw/" + folder + "/" 
-            dataFile = dataFolder + fileName + '.ply' #or .las
 
-            featureFile  = pathManager.rootPath + "/features_supervized/" + folder + "/" + fileName + ".h5" 
+            dataType = pathManager.allDataFileType[folder][i]
+            dataFolder = pathManager.rootPath + "/data/raw/" + folder + "/" 
+            dataFile = dataFolder + fileName + '.' + dataType
+
+            supervizedFeatureFile  = pathManager.rootPath + "/features_supervized/" + folder + "/" + fileName + ".h5" 
             spgFile  = pathManager.rootPath + "/superpoint_graphs/" + folder + "/" + fileName + ".h5" 
             parseFile  = pathManager.rootPath + "/parsed/" + folder + "/" + fileName + ".h5"
 
-            voxelisedFile  = pathManager.rootPath + "/data/voxelised/" + folder + "/" + fileName + "/" + fileName + "-prunned" + str(args.voxel_width).replace(".", "-") + ".ply"
+            voxelisedFile  = pathManager.rootPath + "/data/voxelised/" + folder + "/" + fileName + "/" + fileName + "-prunned" + str(args.voxel_width).replace(".", "-") + "." + dataType
 
             for sub in ["/features_supervized", "/superpoint_graphs", "/parsed"] : 
                 mkdirIfNotExist(pathManager.rootPath + sub)
@@ -121,33 +140,18 @@ def main():
 
             print(str(i + 1) + " / " + str(len(pathManager.allDataFileName[folder])) + " ---> "+fileName)
             tab="   "
-            if os.path.isfile(featureFile) and not args.overwrite :
+            if os.path.isfile(supervizedFeatureFile) and not args.overwrite :
                 print(tab + "Reading the existing feature file...")
                 print("Nothing to do")
             else:
                 if args.save:
-                    storePreviousFile(featureFile, timeStamp)
-                #--- build the geometric feature file h5 file ---
-                print("    computing graph structure...")
-                #--- read the data files and compute the labels---
-                # OBJECTS seems to be important
-                #if args.dataset == 's3dis':
-                #    xyz, rgb, labels, objects = read_s3dis_format(data_file)
-                #    if pruning:
-                #        n_objects = int(objects.max()+1)
-                #        xyz, rgb, labels, objects = libply_c.prune(xyz, args.voxel_width, rgb, labels, objects, n_labels, n_objects)
-                #        #hard_labels = labels.argmax(axis=1)
-                #        objects = objects[:,1:].argmax(axis=1)+1
-                #    else: 
-                #    #hard_labels = labels
-                #        objects = objects
+                    storePreviousFile(supervizedFeatureFile, timeStamp)
 
-                #--- build the geometric feature file h5 file ---
                 start = time.perf_counter()
                 if os.path.isfile(voxelisedFile):
                     print("Voxelised file found, voxelisation step skipped")
                     print("Read voxelised file")
-                    xyz, rgb, labels, objects = read_ply(voxelisedFile)
+                    xyz, rgb, labels, objects = read_file(voxelisedFile, dataType)
                     if len(labels) == 0:
                         print("No labels found")
                         n_labels = 0
@@ -155,12 +159,13 @@ def main():
                         print("Labels found")
                 else :
                     print(tab + "Read {}".format(fileName))
-                    xyz, rgb, labels, objects = read_ply(dataFile)
-                    if len(labels) == 0:
+                    xyz, rgb, labels, objects = read_file(dataFile, dataType)
+
+                    if has_labels(labels, dataType):
+                        print("Labels found")
+                    else :
                         print("No labels found")
                         n_labels = 0
-                    else :
-                        print("Labels found")
 
                     end = time.perf_counter()
                     times[0] = times[0] + end - start
@@ -170,19 +175,19 @@ def main():
                         xyz, rgb, labels = reduceDensity(xyz, args.voxel_width, rgb, labels, n_labels)
 
                     print(tab + "Save reduced density")
-                    writePly(voxelisedFile, xyz, rgb, labels.flatten())
+                    write_file(voxelisedFile, xyz, rgb, labels.flatten(), dataType)
 
                 if colors.aggregation:
                     colors.aggregateLabels(labels)
-                else:
-                    labels = np.array([label+1 for label in labels])
+                # Not needed anymore cause the label 0 is now the unknown label
+                #else:
+                #    labels = np.array([label+1 for label in labels])
                 
                 start = time.perf_counter()
 
                 #---compute nn graph-------
                 print(tab + "Compute both {}_nn and {}_nn graphs...".format(args.k_nn_adj, args.k_nn_local))
                 n_ver = xyz.shape[0]    
-                print("computing NN structure")
                 graph_nn, local_neighbors = compute_graph_nn_2(xyz, args.k_nn_adj, args.k_nn_local, voronoi = args.use_voronoi)
                 
                 print("Compute features for embedding")
@@ -193,7 +198,7 @@ def main():
                 
                 # Because for now every points are labelised        
                 no_labels = []
-                hard_labels = labels
+                hard_labels = labels.flatten()
                 #hard_labels = np.argmax(labels[:,1:], 1)
                 is_transition = hard_labels[graph_nn["source"]]!=hard_labels[graph_nn["target"]] * (hard_labels[graph_nn["source"]]!=0) \
                 * (hard_labels[graph_nn["target"]]!=0)
@@ -209,11 +214,12 @@ def main():
                     
                 if (args.compute_geof):
                     geof = libply_c.compute_geof(xyz, local_neighbors, args.k_nn_local).astype('float32')
-                    geof[:,3] = 2. * geof[:,3]
+                    # This is arbitrary rules set in the paper, see for activate
+                    # geof[:,3] = 2. * geof[:,3]
                 else:
                     geof = 0
                 
-                if args.plane_model: #use a simple palne model to the compute elevation
+                if args.plane_model: #use a simple plane model to the compute elevation
                     low_points = ((xyz[:,2]-xyz[:,2].min() < 0.5)).nonzero()[0]
                     reg = RANSACRegressor(random_state=0).fit(xyz[low_points,:2], xyz[low_points,2])
                     elevation = xyz[:,2]-reg.predict(xyz[:,:2])
@@ -224,8 +230,8 @@ def main():
                 ma, mi = np.max(xyz[:,:2],axis=0,keepdims=True), np.min(xyz[:,:2],axis=0,keepdims=True)
                 xyn = (xyz[:,:2] - mi) / (ma - mi + 1e-8) #global position
                     
-                write_structure(featureFile, xyz, rgb, graph_nn, local_neighbors.reshape([n_ver, args.k_nn_local]), \
-                    is_transition, labels, objects, geof, elevation, xyn)
+                write_structure(supervizedFeatureFile, xyz, rgb, graph_nn, local_neighbors.reshape([n_ver, args.k_nn_local]), \
+                    is_transition, labels.flatten(), objects, geof, elevation, xyn)
                     
 #------------------------------------------------------------------------------
 

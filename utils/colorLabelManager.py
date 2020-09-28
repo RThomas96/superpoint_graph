@@ -22,17 +22,18 @@ class ColorLabelManager:
 
                 # Name dict is used per per_class_iou, and then do not need to contain 0
                 # Note that in report 0 cannot be renamed
-                #nameDict[0] = 'Inconnue'
+                # BUT, it is used in report manager too so it need the name 0
+                nameDict[0] = 'Inconnue'
                 for i, line in enumerate(colorFile):
                         values = line.split()
                         key = values[1]+values[2]+values[3]
-                        # No +1 here cause colorDict is used by upSample script
+                        # No +1 here cause colorDict is used by old upsample script without the octree
                         # And there is no unknown label for now in labelised files
                         # To add unknown labels modify here AND AT AGGREGATE LABEL THAT ADD +1
                         colorDict[key] = values[0]
                         # +1 here cause first label is "unknown" label 
                         labelDict[i+1] = [values[1], values[2], values[3]]
-                        nameDict[i] = values[7]
+                        nameDict[i+1] = values[7]
                         aggregationDict.setdefault(values[0],[]).append(i)
                 return colorDict, labelDict, nameDict, aggregationDict
 

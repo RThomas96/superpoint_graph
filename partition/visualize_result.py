@@ -32,6 +32,8 @@ parser.add_argument('file_path', help='Full path of file to display, from data f
 parser.add_argument('-ow', '--overwrite', action='store_true', help='Wether to read existing files or overwrite them')
 parser.add_argument('--supervized', action='store_true', help='Wether to read existing files or overwrite them')
 parser.add_argument('--outType', default='p', help='which cloud to output: s = superpoints, p = predictions')
+parser.add_argument('--filter_label', help='Ouput only SPP with a specific label')
+parser.add_argument('--log', help='Files are read from log directory, you can set some REG_STRENGTH value to choose which file to choose')
 args = parser.parse_args()
 
 outSuperpoints = 's' in args.outType
@@ -39,8 +41,13 @@ outPredictions = 'p' in args.outType
 #---path to data---------------------------------------------------------------
 root = os.path.dirname(os.path.realpath(__file__)) + '/../projects/' + args.ROOT_PATH
 
-folder = os.path.split(args.file_path)[0] + '/'
-file_name = os.path.split(args.file_path)[1]
+if args.log is not None:
+    folder = os.path.split(args.file_path)[0] + '/log/'
+    file_name = os.path.split(args.file_path)[1] + args.log +"-1.0-45-10-1000000.log"
+else:
+    folder = os.path.split(args.file_path)[0] + '/'
+    file_name = os.path.split(args.file_path)[1]
+
 h5FolderPath = folder + file_name
 
 fea_file   = root + "/features/"          + folder + file_name + '.h5'
@@ -87,7 +94,12 @@ if outPredictions:
     if checkIfExist(outPredFile, outPredFileName):
         provider.prediction2ply(outPredFile, xyz, pred_full+1)
 
-if outSuperpoints:
+if outSuperpoints and args.filter_label is not None:
+    print("Filter activated")
+    if checkIfExist(outSPntFile, outSPntFileName):
+        provider.partition2plyfilter(outSPntFile, xyz, components, graph_spg["sp_labels"], args.filter_label)
+
+if outSuperpoints and args.filter_label is None:
     if checkIfExist(outSPntFile, outSPntFileName):
         provider.partition2ply(outSPntFile, xyz, components)
 

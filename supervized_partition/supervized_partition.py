@@ -76,7 +76,7 @@ def parse_args():
     parser.add_argument('--nworkers', default=0, type=int, help='Num subprocesses to use for data loading. 0 means that the data will be loaded in the main process')
     parser.add_argument('--test_nth_epoch', default=10, type=int, help='Test each n-th epoch during training')
     #parser.add_argument('--test_nth_epoch', default=10, type=int, help='Test each n-th epoch during training')
-    parser.add_argument('--save_nth_epoch', default=10, type=int, help='Save model each n-th epoch during training')
+    parser.add_argument('--save_nth_epoch', default=5, type=int, help='Save model each n-th epoch during training')
     parser.add_argument('--test_multisamp_n', default=10, type=int, help='Average logits obtained over runs with different seeds')
     # Optimization arguments
     parser.add_argument('--wd', default=0, type=float, help='Weight decay')
@@ -84,9 +84,10 @@ def parse_args():
     parser.add_argument('--lr_decay', default=0.7, type=float, help='Multiplicative factor used on learning rate at `lr_steps`')
     parser.add_argument('--lr_steps', default='[20,35,45]', help='List of epochs where the learning rate is decreased by `lr_decay`')
     parser.add_argument('--momentum', default=0.9, type=float, help='Momentum')
-    parser.add_argument('--epochs', default=5, type=int, help='Number of epochs to train. If <=0, only testing will be done.')
+    parser.add_argument('--epochs', default=20, type=int, help='Number of epochs to train. If <=0, only testing will be done.')
     # CHANGE -> 2 is for debug purpose, original = 5
-    parser.add_argument('--batch_size', default=2, type=int, help='Batch size')
+    # CHAAAAAAAAAAAAANGE -> 1 is for debug purpose, original = 5
+    parser.add_argument('--batch_size', default=1, type=int, help='Batch size')
     parser.add_argument('--optim', default='adam', help='Optimizer: sgd|adam')
     parser.add_argument('--grad_clip', default=1, type=float, help='Element-wise clipping of gradient. If 0, does not clip')
     # Point cloud processing
@@ -362,6 +363,15 @@ def embed(args):
     
             # iterate over dataset in batches
             for bidx, (fname, edg_source, edg_target, is_transition, labels, objects, clouds_data, xyz) in enumerate(loader):
+
+                # Convertus du shnapus
+                # MAGIC
+                labels = labels[0]
+                convertLabel = np.zeros((len(labels), color.nbColor+1))# +1 because there is the "no label" label
+                for i in range(len(labels)):
+                    convertLabel[i, labels[i]+1] = 1
+
+                labels = convertLabel
                 
                 if args.cuda:
                     is_transition = is_transition.to('cuda',non_blocking=True)
@@ -370,8 +380,8 @@ def embed(args):
                     clouds, clouds_global, nei = clouds_data
                     clouds_data = (clouds.to('cuda',non_blocking=True),clouds_global.to('cuda',non_blocking=True),nei) 
 
-                #embeddings = ptnCloudEmbedder.run_batch(model, *clouds_data, xyz)
-                embeddings = ptnCloudEmbedder.run_batch_cpu(model, *clouds_data, xyz)
+                embeddings = ptnCloudEmbedder.run_batch(model, *clouds_data, xyz)
+                #embeddings = ptnCloudEmbedder.run_batch_cpu(model, *clouds_data, xyz)
             
                 diff = compute_dist(embeddings, edg_source, edg_target, args.dist_type)
                 
@@ -469,11 +479,8 @@ def embed(args):
                         pass
                     write_spg(spg_file, graph_sp, pred_components, pred_in_component)
                     parseFile = os.path.join(folder_hierarchy.spg_folder + "/../parsed", fname[0])
-                    if os.path.isfile(parseFile) and not args.overwrite :
-                        print(tab + "Reading the existing parsed file...")
-                    else:
-                        featureFile = os.path.join(folder_hierarchy.spg_folder + "/../features_supervized", fname[0])
-                        parseCloudForPointNET(featureFile, spg_file, parseFile)
+                    featureFile = os.path.join(folder_hierarchy.spg_folder + "/../features_supervized", fname[0])
+                    parseCloudForPointNET(featureFile, spg_file, parseFile)
 
                     # Debugging purpose - write the embedding file and an exemple of scalar files
                     # if bidx % 0 == 0:

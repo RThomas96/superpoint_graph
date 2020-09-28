@@ -4,6 +4,7 @@
     Current version: 2020 Richard Thomas
     Script for partioning into simples shapes and prepare data
 """
+import pandas
 import random
 import os.path
 import shutil
@@ -147,12 +148,13 @@ parser.add_argument('--voxel_width', default=0.03, type=float, help='voxel size 
 parser.add_argument('--ver_batch', default=0, type=int, help='Batch size for reading large files, 0 do disable batch loading')
 parser.add_argument('-ow', '--overwrite', action='store_true', help='Wether to read existing files or overwrite them')
 parser.add_argument('--save', action='store_true', help='Wether to read existing files or overwrite them')
+parser.add_argument('--timestamp', action='store_true', help='Create a time stamp with time rather than parameters values')
+parser.add_argument('--keep_features', action='store_true', help='If set, do not recompute feature file')
+
 args = parser.parse_args()
 
 if(args.overwrite):
     print("Warning: files will be overwritten !!")
-
-timeStamp = datetime.now().strftime("-%d-%m-%Y-%H:%M:%S")
 
 colors = ColorLabelManager()
 n_labels = colors.nbColor
@@ -164,6 +166,14 @@ times = [0.,0.,0.,0.] # Time for computing: features / partition / spg
 for folder in pathManager.folders:
     print("=================\n   "+folder+"\n=================")
     reportManager.train = not reportManager.train
+
+    # Init timestamp
+    if args.save:
+        if args.timestamp:
+            timeStamp = datetime.now().strftime("-%d-%m-%Y-%H:%M:%S")
+        else:
+            data = np.array(pandas.read_csv(reportManager.getCsvPath(), sep=';', header=None))
+            timeStamp="-".join(map(str, data[-1][0:5]))
 
     for i, fileName in enumerate(pathManager.allDataFileName[folder]):
 
@@ -190,7 +200,7 @@ for folder in pathManager.folders:
         tab="   "
 
         #--- build the geometric feature file h5 file ---
-        if os.path.isfile(featureFile) and not args.overwrite :
+        if args.keep_features or (os.path.isfile(featureFile) and not args.overwrite) :
             print(tab + "Reading the existing feature file...")
             geof, xyz, rgb, graph_nn, labels = provider.read_features(featureFile)
         else :
@@ -234,8 +244,9 @@ for folder in pathManager.folders:
 
             if colors.aggregation:
                 colors.aggregateLabels(labels)
-            else:
-                labels = np.array([label+1 for label in labels])
+            # Not needed anymore cause the label 0 is now the unknown label
+            #else:
+            #    labels = np.array([label+1 for label in labels])
             
             start = time.perf_counter()
 
@@ -287,6 +298,11 @@ for folder in pathManager.folders:
             print(tab + "Computation of the SPG...")
             start = time.perf_counter()
             graph_sp = graphs.compute_sp_graph(xyz, args.d_se_max, in_component, components, labels, n_labels)
+
+            # Structure graph_sp
+
+            # "sp_labels" = nb of points per label
+            # Ex: [ 0, 0, 10, 2] --> 10 pt of label 2 and 2 pt of label 3
 
             reportManager.computeStatsOnSpp(components, graph_sp)
 
