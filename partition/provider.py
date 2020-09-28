@@ -22,7 +22,6 @@ sys.path.append("./utils")
 import pdal # For laz reading
 from colorLabelManager import ColorLabelManager
 
-
 DIR_PATH = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(0, os.path.join(DIR_PATH, '..'))
 from partition.ply_c import libply_c
@@ -31,6 +30,32 @@ from sklearn.decomposition import PCA
 
 from pudb import set_trace 
 
+#------------------------------------------------------------------------------
+def transition2ply(filename, xyz, edge_source, is_transition):
+    """write a ply with random colors for each components for only a specific label"""
+
+    red=np.array([255, 0, 0])
+    blue=np.array([0, 0, 255])
+
+    prop = [('x', 'f4'), ('y', 'f4'), ('z', 'f4'), ('red', 'u1')
+    , ('green', 'u1'), ('blue', 'u1')]
+
+    transitions = np.array([is_transition==1]).nonzero()[1]
+
+    transitionsIdx = edge_source[transitions] 
+
+    color = np.zeros(xyz.shape)
+    color[:] = blue
+    color[transitionsIdx] = red
+
+    vertex_all = np.empty(len(xyz), dtype=prop)
+    for i in range(0, 3):
+        vertex_all[prop[i][0]] = xyz[:, i]
+    for i in range(0, 3):
+        vertex_all[prop[i+3][0]] = color[:, i] 
+
+    ply = PlyData([PlyElement.describe(vertex_all, 'vertex')], text=True)
+    ply.write(filename)
 #------------------------------------------------------------------------------
 def partition2plyfilter(filename, xyz, components, labels, filterLabel):
     """write a ply with random colors for each components for only a specific label"""

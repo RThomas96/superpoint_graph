@@ -197,8 +197,9 @@ def main():
                 #hard_labels[no_labels] = 0
                 
                 # Because for now every points are labelised        
-                no_labels = []
+                no_labels = (labels.flatten()==0).nonzero()
                 hard_labels = labels.flatten()
+                hard_labels[no_labels] = 0 # Useless in this case, but to be sure
                 #hard_labels = np.argmax(labels[:,1:], 1)
                 is_transition = hard_labels[graph_nn["source"]]!=hard_labels[graph_nn["target"]] * (hard_labels[graph_nn["source"]]!=0) \
                 * (hard_labels[graph_nn["target"]]!=0)

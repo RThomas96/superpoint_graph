@@ -14,6 +14,9 @@ from plyfile import PlyData, PlyElement
 from pathlib import Path
 import provider
 
+sys.path.append("./supervized_partition/")
+import graph_processing as graph
+
 def openPredictions(res_file, h5FolderPath):
     try:
         pred_red  = np.array(provider.h5py.File(res_file, 'r').get(h5FolderPath))        
@@ -31,13 +34,14 @@ parser.add_argument('predFileName', help='Name of the prediction file used, they
 parser.add_argument('file_path', help='Full path of file to display, from data folder, must be "test/X"')
 parser.add_argument('-ow', '--overwrite', action='store_true', help='Wether to read existing files or overwrite them')
 parser.add_argument('--supervized', action='store_true', help='Wether to read existing files or overwrite them')
-parser.add_argument('--outType', default='p', help='which cloud to output: s = superpoints, p = predictions')
-parser.add_argument('--filter_label', help='Ouput only SPP with a specific label')
+parser.add_argument('--outType', default='p', help='which cloud to output: s = superpoints, p = predictions, t = transitions (only for supervized partitions)')
+parser.add_argument('--filter_label', help='Output only SPP with a specific label')
 parser.add_argument('--log', help='Files are read from log directory, you can set some REG_STRENGTH value to choose which file to choose')
 args = parser.parse_args()
 
 outSuperpoints = 's' in args.outType
 outPredictions = 'p' in args.outType
+outTransitions = 't' in args.outType
 #---path to data---------------------------------------------------------------
 root = os.path.dirname(os.path.realpath(__file__)) + '/../projects/' + args.ROOT_PATH
 
@@ -54,6 +58,7 @@ fea_file   = root + "/features/"          + folder + file_name + '.h5'
 supervized_fea_file   = root + "/features_supervized/"          + folder + file_name + '.h5'
 spg_file   = root + "/superpoint_graphs/" + folder + file_name + '.h5'
 res_file   = root + "/results/" + args.predFileName + '.h5'
+
 outPredFileName = file_name + "_pred.ply"
 outPredFile   = root + "/visualisation/predictions/" + args.predFileName + "/" + outPredFileName 
 Path(root + "/visualisation/predictions/" + args.predFileName).mkdir(parents=True, exist_ok=True)
@@ -62,18 +67,27 @@ outSPntFileName = file_name + "_partition.ply"
 outSPntFile   = root + "/visualisation/superpoints/" + outSPntFileName 
 Path(root + "/visualisation/superpoints/" + args.predFileName).mkdir(parents=True, exist_ok=True)
 
+outTransFileName = file_name + "_transition.ply"
+outTransFile   = root + "/visualisation/transitions/" + outTransFileName 
+Path(root + "/visualisation/transitions/" + args.predFileName).mkdir(parents=True, exist_ok=True)
+
 if args.supervized:
     fea_file = supervized_fea_file
 
 if not os.path.isfile(fea_file) :
     raise ValueError("%s does not exist and is needed" % fea_file)
-if not os.path.isfile(spg_file):    
+if not os.path.isfile(spg_file) and not outTransitions:    
     raise ValueError("%s does not exist and is needed to output the partition  or result ply" % spg_file) 
 if outPredictions and not os.path.isfile(res_file):
     raise ValueError("%s does not exist and is needed to output the result ply" % res_file) 
 
-geof, xyz, rgb, graph_nn, labels = provider.read_features(fea_file)
-graph_spg, components, in_component = provider.read_spg(spg_file)
+if args.supervized:
+    xyz, rgb, edg_source, edg_target, is_transition, local_geometry, labels, objects, elevation, xyn = graph.read_structure(supervized_fea_file, False)
+else:
+    geof, xyz, rgb, graph_nn, labels = provider.read_features(fea_file)
+
+if not outTransitions:
+    graph_spg, components, in_component = provider.read_spg(spg_file)
 
 if outPredictions:
     pred_full = openPredictions(res_file, folder + file_name)
@@ -90,9 +104,13 @@ def checkIfExist(file, fileName):
         print("writing the file {}...".format(fileName))
     return True
 
+if outTransitions:
+    if checkIfExist(outTransFile, outTransFileName):
+        provider.transition2ply(outTransFile, xyz, edg_source, is_transition)
+
 if outPredictions:
     if checkIfExist(outPredFile, outPredFileName):
-        provider.prediction2ply(outPredFile, xyz, pred_full+1)
+        provider.prediction2ply(outPredFile, xyz, pred_full)
 
 if outSuperpoints and args.filter_label is not None:
     print("Filter activated")
