@@ -139,7 +139,7 @@ def mkdirIfNotExist(dir):
 
 parser = argparse.ArgumentParser(description='Large-scale Point Cloud Semantic Segmentation with Superpoint Graphs')
 parser.add_argument('ROOT_PATH', help='name of the folder containing the data directory')
-parser.add_argument('--knn_geofeatures', default=45, type=int, help='number of neighbors for the geometric features')
+parser.add_argument('--knn_geofeatures', default=100, type=int, help='number of neighbors for the geometric features')
 parser.add_argument('--knn_adj', default=10, type=int, help='adjacency structure for the minimal partition')
 parser.add_argument('--lambda_edge_weight', default=1., type=float, help='parameter determine the edge weight for minimal part.')
 parser.add_argument('--reg_strength', default=0.03, type=float, help='regularization strength for the minimal partition')
