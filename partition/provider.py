@@ -100,6 +100,17 @@ def partition2ply(filename, xyz, components):
     ply = PlyData([PlyElement.describe(vertex_all, 'vertex')], text=True)
     ply.write(filename)
 #------------------------------------------------------------------------------
+def partition2laz(filename, xyz, components):
+    """write a ply with random colors for each components"""
+    random_color = lambda: random.randint(0, 255)
+    color = np.zeros(xyz.shape)
+    for i_com in range(0, len(components)):
+        color[components[i_com], :] = [random_color(), random_color()
+        , random_color()]
+    prop = [('x', 'f4'), ('y', 'f4'), ('z', 'f4'), ('red', 'u1')
+    , ('green', 'u1'), ('blue', 'u1')]
+    write_laz_simple(filename, xyz, color)
+#------------------------------------------------------------------------------
 def geof2ply(filename, xyz, geof):
     """write a ply with colors corresponding to geometric features"""
     color = np.array(255 * geof[:, [0, 1, 3]], dtype='uint8')
@@ -111,6 +122,23 @@ def geof2ply(filename, xyz, geof):
         vertex_all[prop[i+3][0]] = color[:, i]
     ply = PlyData([PlyElement.describe(vertex_all, 'vertex')], text=True)
     ply.write(filename)
+#------------------------------------------------------------------------------
+def geof2laz(filename, xyz, geof):
+    color = np.array(255 * geof[:, [0, 1, 3]], dtype='uint8')
+    write_laz_simple(filename, xyz, color)
+#------------------------------------------------------------------------------
+def geofstd2laz(filename, xyz, geof, components, in_component):
+    geofpt = np.copy(components)   
+    geofpt = [geof[x] for x in components]
+    std1 = [np.std(x[:, 0]) for x in geofpt] 
+    std2 = [np.std(x[:, 1]) for x in geofpt] 
+    std3 = [np.std(x[:, 2]) for x in geofpt] 
+    values = np.array([std1, std2, std3]).T
+    componentsColor = np.array(255 * values, dtype='uint8')
+
+    color = componentsColor[np.array(in_component)]
+
+    write_laz_simple(filename, xyz, color)
 #------------------------------------------------------------------------------
 def prediction2ply(filename, xyz, prediction):
     """write a ply with colors for each class"""
