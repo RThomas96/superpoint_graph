@@ -147,9 +147,9 @@ def prediction2ply(filename, xyz, prediction):
     if len(prediction.shape) > 1 and prediction.shape[1] > 1:
         prediction = np.argmax(prediction, axis = 1)
     color = np.zeros(xyz.shape)
-    for i_label in range(0, n_label + 1): # +1 here cause n_label do not count the 0 label 
+    for i_label in range(0, n_label): # +1 here cause n_label do not count the 0 label 
         #color[np.where(prediction == i_label), :] = get_color_from_label(i_label, dataset)
-        color[np.where(prediction == i_label), :] = colorLabelManager.labelDict[i_label] 
+        color[np.where(prediction == i_label), :] = colorLabelManager.labelDict[i_label+1] 
     prop = [('x', 'f4'), ('y', 'f4'), ('z', 'f4'), ('red', 'u1'), ('green', 'u1'), ('blue', 'u1')]
     vertex_all = np.empty(len(xyz), dtype=prop)
     for i in range(0, 3):
@@ -267,10 +267,11 @@ def read_laz(filename):
     g = np.reshape(arrays['Green'], (count,1))
     b = np.reshape(arrays['Blue'], (count,1))
 
-    labels = np.reshape(arrays['Classification'], (count,1))
+    #labels = np.reshape(arrays['Classification'], (count,1))
+    labels = np.array(arrays['Classification']).flatten()
 
     xyz = np.hstack((x,y,z)).astype('f4')
-    rgb = np.hstack((r,g,b)).astype('u1')
+    rgb = np.hstack((r/255,g/255,b/255)).astype('u1')
     #rgb = rgb/255
     return xyz, rgb, labels, [] 
 #------------------------------------------------------------------------------
@@ -412,7 +413,7 @@ def write_laz_labels(filename, xyz, rgb, labels):
     for i_prop in range(0, 3):
         vertex_all[prop[i_prop][0]] = xyz[:, i_prop]
     for i_prop in range(0, 3):
-        vertex_all[prop[i_prop+3][0]] = rgb[:, i_prop] /255
+        vertex_all[prop[i_prop+3][0]] = rgb[:, i_prop]
     vertex_all[prop[6][0]] = labels
 
     # Write our data to an LAZ file
@@ -656,6 +657,7 @@ def perfect_prediction(components, labels):
     """assign each superpoint with the majority label"""
     full_pred = np.zeros((labels.shape[0],),dtype='uint32')
     for i_com in range(len(components)):
+        # Here we have labels has a 2D array cause each point is composed of multiple points with differente labels
         label_com = labels[components[i_com],1:].sum(0).argmax()
         full_pred[components[i_com]]=label_com
     return full_pred
