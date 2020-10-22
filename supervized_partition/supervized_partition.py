@@ -29,6 +29,7 @@ sys.path.append("./utils")
 
 from colorLabelManager import ColorLabelManager
 from pathManager import PathManager
+from reportManager import ReportManagerSupervized
 
 from partition.ply_c import libply_c
 
@@ -87,7 +88,7 @@ def parse_args():
     parser.add_argument('--epochs', default=20, type=int, help='Number of epochs to train. If <=0, only testing will be done.')
     # CHANGE -> 2 is for debug purpose, original = 5
     # CHAAAAAAAAAAAAANGE -> 1 is for debug purpose, original = 5
-    parser.add_argument('--batch_size', default=1, type=int, help='Batch size')
+    parser.add_argument('--batch_size', default=3, type=int, help='Batch size')
     parser.add_argument('--optim', default='adam', help='Optimizer: sgd|adam')
     parser.add_argument('--grad_clip', default=1, type=float, help='Element-wise clipping of gradient. If 0, does not clip')
     # Point cloud processing
@@ -345,9 +346,12 @@ def embed(args):
         #return 0,0,0
         return loss_meter.value()[0], n_clusters_meter.value()[0]
     
-    def evaluate(i_epoch):
+    def evaluate(args, i_epoch):
         """ Evaluated model on test set """
         model.eval()
+
+        pathManager = PathManager(args)
+        reportManager = ReportManagerSupervized(pathManager.rootPath, dbinfo['classes'])
         
         with torch.no_grad():
             
@@ -369,7 +373,7 @@ def embed(args):
                 labels = labels[0]
                 convertLabel = np.zeros((len(labels), color.nbColor+1))# +1 because there is the "no label" label
                 for i in range(len(labels)):
-                    convertLabel[i, labels[i]+1] = 1
+                    convertLabel[i, labels[i]] = 1
 
                 labels = convertLabel
                 
@@ -390,8 +394,11 @@ def embed(args):
                     loss1, loss2 = compute_loss(args, diff, is_transition, weights_loss)
                     loss = (loss1 + loss2) / weights_loss.shape[0]
                     pred_transition = pred_in_component[edg_source]!=pred_in_component[edg_target]
+                    # per_pred = maj label of each SPP
                     per_pred = perfect_prediction(pred_components, labels)
                     CM_classes.count_predicted_batch(labels[:,1:], per_pred)
+
+                    reportManager.computeStatsOnSpp(i_epoch, pred_components, labels)
                 else:
                     loss = 0
                     
@@ -401,8 +408,11 @@ def embed(args):
                     n_clusters_meter.add(len(pred_components))
                     BR_meter.add((is_transition.sum())*compute_boundary_recall(is_transition, relax_edge_binary(pred_transition, edg_source, edg_target, xyz.shape[0], args.BR_tolerance)),n=is_transition.sum())
                     BP_meter.add((pred_transition.sum())*compute_boundary_precision(relax_edge_binary(is_transition, edg_source, edg_target, xyz.shape[0], args.BR_tolerance), pred_transition),n=pred_transition.sum())
+
+
+        reportManager.saveStat()
         CM = CM_classes.confusion_matrix
-        return loss_meter.value()[0], n_clusters_meter.value()[0], 100*CM.trace() / CM.sum(), BR_meter.value()[0], BP_meter.value()[0]
+        return loss_meter.value()[0], n_clusters_meter.value()[0], 100*CM.trace() / CM.sum(), BR_meter.value()[0], BP_meter.value()[0], CM
     
     def evaluate_final():
         """ Evaluated model on test set """
@@ -432,10 +442,11 @@ def embed(args):
                 # Note: the save of the ouput of a pruned labelised cloud is BUGGED (but we don't use it for now)
                 # Note: this add can break some things, cause we loose informations, like the number of points in each voxels, in this fix
                     # we juste add 1 to the right class
+
                 labels = labels[0]
                 convertLabel = np.zeros((len(labels), color.nbColor+1))# +1 because there is the "no label" label
                 for i in range(len(labels)):
-                    convertLabel[i, labels[i]+1] = 1
+                    convertLabel[i, labels[i]] = 1
 
                 labels = convertLabel
 
@@ -514,8 +525,9 @@ def embed(args):
         loss, n_sp = train(epoch)
 
         if (epoch+1) % args.test_nth_epoch == 0: #or epoch+1==args.epochs:
-            loss_test, n_clusters_test, ASA_test, BR_test, BP_test = evaluate(epoch)
-            print('-> Train loss: %1.5f - Test Loss: %1.5f  |  n_clusters:  %5.1f  |  ASA: %3.2f %%  |  Test BR: %3.2f %%  |  BP : %3.2f%%' % (loss, loss_test, n_clusters_test, ASA_test, BR_test, BP_test))
+            loss_test, n_clusters_test, ASA_test, BR_test, BP_test, CM = evaluate(args, epoch)
+            AccBarr = (CM[4, 4].sum() / CM[4].sum())*100.
+            print('-> Train loss: %1.5f - Test Loss: %1.5f  |  n_clusters:  %5.1f  |  ASA: %3.2f %%  |  Test BR: %3.2f %%  |  BP : %3.2f%% | Acc barriere %3.2f %%' % (loss, loss_test, n_clusters_test, ASA_test, BR_test, BP_test, AccBarr))
         else:
             loss_test, n_clusters_test, ASA_test, BR_test, BP_test = 0,0,0,0,0
             print('-> Train loss: %1.5f  superpoints size : %5.0f' % (loss, n_sp))

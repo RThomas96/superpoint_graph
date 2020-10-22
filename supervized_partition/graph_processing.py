@@ -19,6 +19,7 @@ from sklearn.linear_model import RANSACRegressor
 from plyfile import PlyData, PlyElement
 from datetime import datetime
 import time
+import pdal
 
 DIR_PATH = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(0, os.path.join(DIR_PATH, '..'))
@@ -66,11 +67,11 @@ def storePreviousFile(fileFullName, timeStamp):
 
 def reduceDensity(xyz, voxel_width, rgb, labels, n_labels):
     asNoLabel = False
-    if len(labels) == 0:
+    if n_labels == 0:
         asNoLabel = True
         labels = np.array([]) 
         n_labels = 0
-    xyz, rgb, labels, dump = libply_c.prune(xyz, args.voxel_width, rgb, labels, np.zeros(1, dtype='uint8'), n_labels, 0)
+    xyz, rgb, labels, dump = libply_c.prune(xyz, voxel_width, rgb, labels, np.zeros(1, dtype='uint8'), n_labels, 0)
     if asNoLabel:
         labels = np.array([]) 
     return xyz, rgb, labels
@@ -89,6 +90,7 @@ def main():
     parser.add_argument('--ver_batch', default=5000000, type=int, help='batch size for reading large files')
     parser.add_argument('-ow', '--overwrite', action='store_true', help='Wether to read existing files or overwrite them')
     parser.add_argument('--save', action='store_true', help='Wether to read existing files or overwrite them')
+    parser.add_argument('--voxelize', action='store_true', help='Choose to perform voxelization step or not')
 
     args = parser.parse_args()
     
@@ -130,7 +132,33 @@ def main():
             spgFile  = pathManager.rootPath + "/superpoint_graphs/" + folder + "/" + fileName + ".h5" 
             parseFile  = pathManager.rootPath + "/parsed/" + folder + "/" + fileName + ".h5"
 
-            voxelisedFile  = pathManager.rootPath + "/data/voxelised/" + folder + "/" + fileName + "/" + fileName + "-prunned" + str(args.voxel_width).replace(".", "-") + "." + dataType
+            if args.voxelize:
+                voxPath = pathManager.rootPath + "/data/voxelised/" + folder + "/" + fileName + "/"
+                if not os.path.isdir(voxPath):
+                    os.mkdir(voxPath)
+                voxelisedFile  = voxPath + fileName + "-prunned" + str(args.voxel_width).replace(".", "-") + "." + dataType
+                if not os.path.isfile(voxelisedFile):
+                    print("Voxelised file NOT found, voxelisation step begin")
+                    json = """
+                    [
+                        {
+                            "type":"readers.las",
+                            "filename":"%s"
+                        },
+                        {
+                            "type":"filters.voxelcentroidnearestneighbor",
+                            "cell":%s
+                        },
+                        {
+                            "type":"writers.las",
+                            "filename":"%s"
+                        }
+                    ]
+                    """ % (dataFile, args.voxel_width, voxelisedFile)
+                    pipeline = pdal.Pipeline(json)
+                    count = pipeline.execute()
+            else:
+                voxelisedFile = dataFile
 
             for sub in ["/features_supervized", "/superpoint_graphs", "/parsed"] : 
                 mkdirIfNotExist(pathManager.rootPath + sub)
@@ -152,11 +180,11 @@ def main():
                     print("Voxelised file found, voxelisation step skipped")
                     print("Read voxelised file")
                     xyz, rgb, labels, objects = read_file(voxelisedFile, dataType)
-                    if len(labels) == 0:
+                    if has_labels(labels, dataType):
+                        print("Labels found")
+                    else :
                         print("No labels found")
                         n_labels = 0
-                    else :
-                        print("Labels found")
                 else :
                     print(tab + "Read {}".format(fileName))
                     xyz, rgb, labels, objects = read_file(dataFile, dataType)
@@ -222,8 +250,12 @@ def main():
                 
                 if args.plane_model: #use a simple plane model to the compute elevation
                     low_points = ((xyz[:,2]-xyz[:,2].min() < 0.5)).nonzero()[0]
-                    reg = RANSACRegressor(random_state=0).fit(xyz[low_points,:2], xyz[low_points,2])
-                    elevation = xyz[:,2]-reg.predict(xyz[:,:2])
+                    try:
+                        reg = RANSACRegressor(random_state=0).fit(xyz[low_points,:2], xyz[low_points,2])
+                        elevation = xyz[:,2]-reg.predict(xyz[:,:2])
+                    except ValueError:
+                        print("ERROR: can't use Ransac, an outlier is probably far too low")
+                        elevation = xyz[:,2] - xyz[:,2].min()
                 else:
                     elevation = xyz[:,2] - xyz[:,2].min()
                 
