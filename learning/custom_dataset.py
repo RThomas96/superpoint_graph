@@ -83,14 +83,18 @@ def get_info(args):
 
     if loss == 'none':
         weights = np.ones((colors.nbColor,),dtype='f4')
+        weights = torch.from_numpy(weights).cuda() if args.cuda else torch.from_numpy(weights)
     else:
-        print("Loss weights not implemented yet !")
-        weights = np.ones((colors.nbColor,),dtype='f4')
-    weights = torch.from_numpy(weights).cuda() if args.cuda else torch.from_numpy(weights)
+        print("Hard coded loss weights !")
+        weights = np.array([0.6, 0.7, 0.5, 1, 1, 1, 1, 1, 1])
+        #print("Loss weights not implemented yet !")
+        #weights = np.ones((colors.nbColor,),dtype='f4')
+        weights = torch.from_numpy(weights).cuda() if args.cuda else torch.from_numpy(weights)
     return {
         'node_feats': 11 if args.pc_attribs=='' else len(args.pc_attribs),
         'edge_feats': edge_feats,
         'class_weights': weights,
         'classes': colors.nbColor,
-        'inv_class_map': colors.nameDict
+        #'inv_class_map': colors.nameDict[1:]
+        'inv_class_map': {x: colors.nameDict[x] for x in colors.nameDict if x not in [0]} 
     }
