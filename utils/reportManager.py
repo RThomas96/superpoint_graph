@@ -1,4 +1,3 @@
-import pdb
 import csv
 import os.path
 import numpy as np
@@ -8,11 +7,143 @@ from operator import truediv
 from collections import Counter
 from colorLabelManager import ColorLabelManager
 
+class ReportManagerSupervized:
+    def __init__(self, rootPath, n_labels):
+        self.filePath = rootPath + "/reports/" + datetime.now().strftime("%Y-%m-%d-%H:%M:%S") + ".report"
+        
+        self.csvPathTrainingSupervized = rootPath + "/reports/statsTrainingSupervized.csv"
+        self.csvPathTestingSupervized = rootPath + "/reports/statsTestingSupervized.csv"
+
+        Path(rootPath + "/reports").mkdir(parents=True, exist_ok=True)
+        " Indicate if next values added to the class will be from from training data "
+        self.train = True
+
+        " Parameters "
+        self.epoch = 0
+
+        self.nbSuperpoints = 1
+        self.nbOfPoint = 0
+        self.avgNbOfPointPerSpp = 0
+        self.nbOfSppPerClass = np.zeros(n_labels+1)
+        self.wrongPt = 0
+        self.wrongPtPerClass = np.zeros(n_labels+1) 
+        self.nbPtPerClass = np.zeros(n_labels+1) 
+
+    def getCsvPath(self):
+        return self.csvPathTraining if self.train else self.csvPathTesting
+
+    def computeStatsOnSpp(self, i_epoch, components, labels):
+        self.epoch = i_epoch
+
+        #components = np.array(components, dtype=np.array(dtype=int))
+        components = np.array(components)
+        self.nbSuperpoints += len(components)
+        self.nbOfPoint += len(labels)
+        
+        nbPtPerLabelForEachSpp = np.zeros(shape=(len(components), labels.shape[1]))
+        for i, spp in enumerate(components): 
+            for pt in spp:
+                nbPtPerLabelForEachSpp[i] += labels[pt] 
+
+        # Search index of the maximum value for each spp i.e the label in majority 
+        labelOfEachSpp = nbPtPerLabelForEachSpp.argmax(1)
+
+        #self.assignValue(self.nbOfSppPerClass, Counter(labelOfEachSpp))
+        for label in labelOfEachSpp:
+            self.nbOfSppPerClass[label] += 1
+    
+        minorityLabels=np.copy(nbPtPerLabelForEachSpp)
+        for i, idx in enumerate(labelOfEachSpp):
+            minorityLabels[i][idx] = 0 
+
+        self.wrongPt += np.sum(minorityLabels)
+        self.wrongPtPerClass += np.sum(minorityLabels, axis=0)
+
+        self.nbPtPerClass += np.sum(nbPtPerLabelForEachSpp, axis=0) 
+
+        for i, val in enumerate(self.nbPtPerClass):
+            if val < self.wrongPtPerClass[i]:
+                import pdb; pdb.set_trace()
+
+        #nbWrongPt = ((self.getValue(self.nbOfPoint) - wrongPt)/self.getValue(self.nbOfPoint))*100.
+        #self.assignValue(self.accuracy, nbWrongPt)
+
+        #nbPtPerLabel = np.sum(nbPtPerLabelForEachSpp, axis=0)
+
+        #nbPtPerLabel[nbPtPerLabel == 0] = 1
+
+        #accPerLabel = (nbPtPerLabel - wrongPtPerClass)/nbPtPerLabel
+        #dictAccPerLabel = {}
+        #for i, val in enumerate(accPerLabel):
+        #    dictAccPerLabel[i] = val*100.
+        #    #elif nbPtPerLabel[i] > 0:
+        #    #    pdb.set_trace()
+        #    #    dictAccPerLabel[i] = 0
+
+        #self.assignValue(self.accuracyPerClass, dictAccPerLabel)
+
+
+    def averageComputations(self):
+        self.avgNbOfPointPerSpp = self.nbOfPoint / self.nbSuperpoints
+
+    def getStat(self):
+
+        accuracy = ((self.nbOfPoint - self.wrongPt) / self.nbOfPoint) * 100.
+
+        accuracyPerClass = ((self.nbPtPerClass - self.wrongPtPerClass) / self.nbPtPerClass)*100.
+
+        for i, val in enumerate(self.nbOfSppPerClass):
+            if val == 0:
+                accuracyPerClass[i] = 0
+
+        colorLabelManager = ColorLabelManager()
+        nameDict = colorLabelManager.nameDict
+
+        header = list()
+        header.append("Epoch")
+        header.append("Total number of points")
+        header.append("Total accuracy")
+        for name in list(nameDict.values()):
+            header.append(name)
+        header.append("Number of superpoints")
+        header.append("Avg number of points per superpoint")
+        for name in list(nameDict.values()):
+            header.append(name)
+
+        stat = list()
+        stat.append(self.epoch)
+        stat.append(self.nbOfPoint)
+        stat.append(accuracy)
+        stat = stat + list(accuracyPerClass)
+        stat.append(self.nbSuperpoints)
+        stat.append(self.avgNbOfPointPerSpp)
+        stat = stat + list(self.nbOfSppPerClass)
+
+        return [header, stat]
+
+
+    def saveStat(self):
+        self.averageComputations()
+        csvFile1 = self.getStat()
+    
+        trainingFile = self.csvPathTrainingSupervized
+
+        isFile = os.path.isfile(trainingFile)
+        with open(trainingFile, 'a', newline='') as csvfile:
+            spamwriter = csv.writer(csvfile, delimiter=';', quotechar='|', quoting=csv.QUOTE_MINIMAL)
+            if not isFile:
+                spamwriter.writerow(csvFile1[0])
+            spamwriter.writerow(csvFile1[1])
+
 class ReportManager:
     def __init__(self, rootPath, args):
         self.filePath = rootPath + "/reports/" + datetime.now().strftime("%Y-%m-%d-%H:%M:%S") + ".report"
         self.csvPathTraining = rootPath + "/reports/statsTraining.csv"
         self.csvPathTesting = rootPath + "/reports/statsTesting.csv"
+
+        self.csvPathTrainingSupervized = rootPath + "/reports/statsTrainingSupervized.csv"
+        self.csvPathTestingSupervized = rootPath + "/reports/statsTestingSupervized.csv"
+
         Path(rootPath + "/reports").mkdir(parents=True, exist_ok=True)
         " Indicate if next values added to the class will be from from training data "
         self.train = True
@@ -44,10 +175,10 @@ class ReportManager:
     def getCsvPath(self):
         return self.csvPathTraining if self.train else self.csvPathTesting
 
-    def computeStatsOnSpp(self, components, graph):
+    def computeStatsOnSpp(self, components, nbPtPerLabelForEachSpp):
         self.addValue(self.nbSuperpoints, len(components))
         for spp in components: self.addValue(self.nbOfPoint, len(spp))
-        nbPtPerLabelForEachSpp = np.array(graph["sp_labels"])
+        nbPtPerLabelForEachSpp = np.array(nbPtPerLabelForEachSpp)
         # Search index of the maximum value for each spp i.e the label in majority 
         labelOfEachSpp = nbPtPerLabelForEachSpp.argmax(1)
 
@@ -130,21 +261,28 @@ class ReportManager:
         return [header, stat]
 
 
-    def saveStat(self):
+    def saveStat(self, supervized = False):
         self.train = True
         csvFile1 = self.getStat()
         self.train = False
         csvFile2 = self.getStat()
+    
+        if supervized:
+           trainingFile = self.csvPathTrainingSupervized
+           testingFile = self.csvPathTestingSupervized
+        else:
+           trainingFile = self.csvPathTraining
+           testingFile = self.csvPathTesting
 
-        isFile = os.path.isfile(self.csvPathTraining)
-        with open(self.csvPathTraining, 'a', newline='') as csvfile:
+        isFile = os.path.isfile(trainingFile)
+        with open(trainingFile, 'a', newline='') as csvfile:
             spamwriter = csv.writer(csvfile, delimiter=';', quotechar='|', quoting=csv.QUOTE_MINIMAL)
             if not isFile:
                 spamwriter.writerow(csvFile1[0])
             spamwriter.writerow(csvFile1[1])
 
-        isFile = os.path.isfile(self.csvPathTesting)
-        with open(self.csvPathTesting, 'a', newline='') as csvfile:
+        isFile = os.path.isfile(testingFile)
+        with open(testingFile, 'a', newline='') as csvfile:
             spamwriter = csv.writer(csvfile, delimiter=';', quotechar='|', quoting=csv.QUOTE_MINIMAL)
             if not isFile:
                 spamwriter.writerow(csvFile2[0])
