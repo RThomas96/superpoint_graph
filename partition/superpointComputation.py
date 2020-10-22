@@ -150,6 +150,7 @@ parser.add_argument('-ow', '--overwrite', action='store_true', help='Wether to r
 parser.add_argument('--save', action='store_true', help='Wether to read existing files or overwrite them')
 parser.add_argument('--timestamp', action='store_true', help='Create a time stamp with time rather than parameters values')
 parser.add_argument('--keep_features', action='store_true', help='If set, do not recompute feature file')
+parser.add_argument('--voxelize', action='store_true', help='Choose to perform voxelization step or not')
 
 args = parser.parse_args()
 
@@ -188,7 +189,10 @@ for folder in pathManager.folders:
         spgFile  = pathManager.rootPath + "/superpoint_graphs/" + folder + "/" + fileName + ".h5" 
         parseFile  = pathManager.rootPath + "/parsed/" + folder + "/" + fileName + ".h5"
 
+        mkdirIfNotExist(pathManager.rootPath + "/data/voxelised/" + folder + "/" + fileName)
         voxelisedFile  = pathManager.rootPath + "/data/voxelised/" + folder + "/" + fileName + "/" + fileName + "-prunned" + str(args.voxel_width).replace(".", "-") + "." + dataType
+        if not args.voxelize:
+            voxelisedFile = dataFile
 
         for sub in ["/features", "/superpoint_graphs", "/parsed"] : 
             mkdirIfNotExist(pathManager.rootPath + sub)
@@ -208,7 +212,7 @@ for folder in pathManager.folders:
                 storePreviousFile(featureFile, timeStamp)
 
             start = time.perf_counter()
-            if os.path.isfile(voxelisedFile):
+            if os.path.isfile(voxelisedFile) or not args.voxelize:
                 print("Voxelised file found, voxelisation step skipped")
                 print("Read voxelised file")
                 xyz, rgb, labels, objects = provider.read_file(voxelisedFile, dataType)
@@ -240,7 +244,8 @@ for folder in pathManager.folders:
                 # Because labels returned by prune algorithme is a 2D vector
                 # With for each voxel the number of point of each label
                 # So label.flatten() return to much information you need to determine the majoritary label
-                provider.write_file(voxelisedFile, xyz, rgb, labels.flatten(), dataType)
+                # So use label.argmax(1) that return the index of the max value of each sub array
+                provider.write_file(voxelisedFile, xyz, rgb, labels.argmax(1), dataType)
 
             if colors.aggregation:
                 colors.aggregateLabels(labels)
@@ -289,6 +294,8 @@ for folder in pathManager.folders:
             print(tab + "Resolve optimisation problem...")
 
             components, in_component = libcp.cutpursuit(features, graph_nn["source"], graph_nn["target"], graph_nn["edge_weight"], args.reg_strength)
+            if np.array(in_component).sum() == 0:
+                print("Error: cutpursuit not working")
             components = np.array(components, dtype = 'object')
 
 
@@ -304,7 +311,7 @@ for folder in pathManager.folders:
             # "sp_labels" = nb of points per label
             # Ex: [ 0, 0, 10, 2] --> 10 pt of label 2 and 2 pt of label 3
 
-            reportManager.computeStatsOnSpp(components, graph_sp)
+            reportManager.computeStatsOnSpp(components, graph_sp["sp_labels"])
 
             end = time.perf_counter()
             times[3] = times[3] + end - start
