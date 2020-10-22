@@ -18,6 +18,8 @@ import h5py
 from sklearn import preprocessing
 import igraph
 
+# DEBUG
+from pudb import set_trace;
 
 
 def spg_edge_features(edges, node_att, edge_att, args):
