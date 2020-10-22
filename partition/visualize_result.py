@@ -34,7 +34,7 @@ parser.add_argument('predFileName', help='Name of the prediction file used, they
 parser.add_argument('file_path', help='Full path of file to display, from data folder, must be "test/X"')
 parser.add_argument('-ow', '--overwrite', action='store_true', help='Wether to read existing files or overwrite them')
 parser.add_argument('--supervized', action='store_true', help='Wether to read existing files or overwrite them')
-parser.add_argument('--outType', default='p', help='which cloud to output: s = superpoints, p = predictions, t = transitions (only for supervized partitions)')
+parser.add_argument('--outType', default='p', help='which cloud to output: s = superpoints, p = predictions, t = transitions (only for supervized partitions), g = geof, d = geof std')
 parser.add_argument('--filter_label', help='Output only SPP with a specific label')
 parser.add_argument('--log', help='Files are read from log directory, you can set some REG_STRENGTH value to choose which file to choose')
 args = parser.parse_args()
@@ -42,6 +42,8 @@ args = parser.parse_args()
 outSuperpoints = 's' in args.outType
 outPredictions = 'p' in args.outType
 outTransitions = 't' in args.outType
+outGeof = 'g' in args.outType
+outStd = 'd' in args.outType
 #---path to data---------------------------------------------------------------
 root = os.path.dirname(os.path.realpath(__file__)) + '/../projects/' + args.ROOT_PATH
 
@@ -63,13 +65,21 @@ outPredFileName = file_name + "_pred.ply"
 outPredFile   = root + "/visualisation/predictions/" + args.predFileName + "/" + outPredFileName 
 Path(root + "/visualisation/predictions/" + args.predFileName).mkdir(parents=True, exist_ok=True)
 
-outSPntFileName = file_name + "_partition.ply"
+outSPntFileName = file_name + "_partition.laz"
 outSPntFile   = root + "/visualisation/superpoints/" + outSPntFileName 
 Path(root + "/visualisation/superpoints/" + args.predFileName).mkdir(parents=True, exist_ok=True)
 
 outTransFileName = file_name + "_transition.ply"
 outTransFile   = root + "/visualisation/transitions/" + outTransFileName 
 Path(root + "/visualisation/transitions/" + args.predFileName).mkdir(parents=True, exist_ok=True)
+
+outGeofFileName = file_name + "_geof.laz"
+outGeofFile   = root + "/visualisation/features/" + outGeofFileName 
+Path(root + "/visualisation/features/" + args.predFileName).mkdir(parents=True, exist_ok=True)
+
+outStdFileName = file_name + "_std.laz"
+outStdFile   = root + "/visualisation/features/" + outStdFileName 
+Path(root + "/visualisation/features/" + args.predFileName).mkdir(parents=True, exist_ok=True)
 
 if args.supervized:
     fea_file = supervized_fea_file
@@ -104,6 +114,14 @@ def checkIfExist(file, fileName):
         print("writing the file {}...".format(fileName))
     return True
 
+if outStd:
+    if checkIfExist(outStdFile, outStdFileName):
+        provider.geofstd2laz(outStdFile, xyz, geof, components, in_component)
+
+if outGeof:
+    if checkIfExist(outGeofFile, outGeofFileName):
+        provider.geof2laz(outGeofFile, xyz, geof)
+
 if outTransitions:
     if checkIfExist(outTransFile, outTransFileName):
         provider.transition2ply(outTransFile, xyz, edg_source, is_transition)
@@ -119,7 +137,7 @@ if outSuperpoints and args.filter_label is not None:
 
 if outSuperpoints and args.filter_label is None:
     if checkIfExist(outSPntFile, outSPntFileName):
-        provider.partition2ply(outSPntFile, xyz, components)
+        provider.partition2laz(outSPntFile, xyz, components)
 
 #if bool(args.upsample):
 #    if args.dataset=='s3dis':
