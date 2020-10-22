@@ -7,6 +7,7 @@ from __future__ import division
 from __future__ import print_function
 from builtins import range
 
+import csv
 import time
 import random
 import numpy as np
@@ -136,6 +137,21 @@ def main():
     outDir = pathManager.rootPath + "/results"
     modelDir = pathManager.rootPath + "/pretrained"
 
+    args.odir = modelDir
+
+    colorLabelManager = ColorLabelManager()
+    
+    statPath = pathManager.rootPath + "/reports/learningStat.csv"
+
+    className = []
+    for name in list(colorLabelManager.nameDict.values())[1:]:
+        className.append(name)
+
+    if not os.path.isfile(statPath):
+        with open(statPath, 'w', newline='') as csvfile:
+            spamwriter = csv.writer(csvfile, delimiter=';', quotechar='|', quoting=csv.QUOTE_MINIMAL)
+            spamwriter.writerow(["epoch", "acc", "loss", "oacc", "avg_iou", "acc_test", "oacc_test", "avg_iou_test", "avg_acc_test", "best_iou"] + className)
+
     if not os.path.isdir(outDir): os.mkdir(outDir)
     if not os.path.isdir(modelDir): os.mkdir(modelDir)
      
@@ -161,14 +177,14 @@ def main():
     create_dataset = custom_dataset.get_datasets
 
     # Create model and optimizer
-    #if args.resume != '':
-    #    if args.resume=='RESUME': args.resume = args.odir + '/model.pth.tar'
-    #    model, optimizer, stats = resume(args, dbinfo)
-    #else:
-    print("Setup CUDA model")
-    model = create_model(args, dbinfo)
-    optimizer = create_optimizer(args, model)
-    stats = []
+    if args.resume != '':
+        if args.resume=='RESUME': args.resume = modelDir + '/model.pth.tar'
+        model, optimizer, stats = resume(args, dbinfo)
+    else:
+        print("Setup CUDA model")
+        model = create_model(args, dbinfo)
+        optimizer = create_optimizer(args, model)
+        stats = []
 
     train_dataset, test_dataset, valid_dataset, scaler = create_dataset(args)
 
@@ -183,7 +199,7 @@ def main():
         model.train()
 
         " collate_fn = function called on each sample per batch in order to concatenate them into a single batch "
-        " vatch_size = number of sample i.e spg, per batch, default value is 2 "
+        " batch_size = number of sample i.e spg, per batch, default value is 2 "
         loader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size, collate_fn=spg.eccpc_collate, num_workers=args.nworkers, shuffle=True, drop_last=True)
         if logging.getLogger().getEffectiveLevel() > logging.DEBUG: loader = tqdm(loader, ncols=65)
 
@@ -276,7 +292,7 @@ def main():
                 acc_meter.add(o_cpu, t_cpu)
                 confusion_matrix.count_predicted_batch(tvec_cpu, np.argmax(o_cpu,1))
 
-        return meter_value(acc_meter), loss_meter.value()[0], confusion_matrix.get_overall_accuracy(), confusion_matrix.get_average_intersection_union(), confusion_matrix.get_mean_class_accuracy()
+        return meter_value(acc_meter), loss_meter.value()[0], confusion_matrix.get_overall_accuracy(), confusion_matrix.get_average_intersection_union(), confusion_matrix.get_mean_class_accuracy(), confusion_matrix.get_confusion_matrix()
 
     ############
     def eval_final():
@@ -323,7 +339,10 @@ def main():
         per_class_iou = {}
         perclsiou = confusion_matrix.get_intersection_union_per_class()
         for c, name in dbinfo['inv_class_map'].items():
-            per_class_iou[name] = perclsiou[c]
+            try:
+                per_class_iou[name] = perclsiou[c]
+            except IndexError:
+                print("Missing one label in data: " + name)
 
         return meter_value(acc_meter), confusion_matrix.get_overall_accuracy(), confusion_matrix.get_average_intersection_union(), per_class_iou, predictions,  confusion_matrix.get_mean_class_accuracy(), confusion_matrix.confusion_matrix
 
@@ -348,22 +367,25 @@ def main():
 
         acc, loss, oacc, avg_iou = train()
 
-        print(TRAIN_COLOR + '-> Train Loss: %1.4f   Train accuracy: %3.2f%%' % (loss, acc))
+        acc_val, loss_val, oacc_val, avg_iou_val, B, C = eval(True)
+        #print(TRAIN_COLOR + '-> Train Loss: %1.4f   Train accuracy: %3.2f%%' % (loss, acc))
+
+        print(TRAIN_COLOR + '-> Train Loss: %1.4f | Valid Loss: %1.4f | Train accuracy: %3.2f%%' % (loss, loss_val, acc_val))
 
         new_best_model = False
-        if args.use_val_set:
-            acc_val, loss_val, oacc_val, avg_iou_val, avg_acc_val = eval(True)
-            print(VAL_COLOR + '-> Val Loss: %1.4f  Val accuracy: %3.2f%%  Val oAcc: %3.2f%%  Val IoU: %3.2f%%  best ioU: %3.2f%%' % \
-                 (loss_val, acc_val, 100*oacc_val, 100*avg_iou_val,100*max(best_iou,avg_iou_val)) + TRAIN_COLOR)
-            if avg_iou_val>best_iou: #best score yet on the validation set
-                print(BEST_COLOR + '-> New best model achieved!' + TRAIN_COLOR)
-                best_iou = avg_iou_val
-                new_best_model = True
-                torch.save({'epoch': epoch + 1, 'args': args, 'state_dict': model.state_dict(), 'optimizer' : optimizer.state_dict(), 'scaler': scaler},
-                       os.path.join(modelDir, 'model.pth.tar'))
-        elif epoch % args.save_nth_epoch == 0 or epoch==args.epochs-1:
-                torch.save({'epoch': epoch + 1, 'args': args, 'state_dict': model.state_dict(), 'optimizer' : optimizer.state_dict(), 'scaler': scaler},
-                       os.path.join(modelDir, 'model.pth.tar'))
+        #if args.use_val_set:
+        #    acc_val, loss_val, oacc_val, avg_iou_val, avg_acc_val = eval(True)
+        #    print(VAL_COLOR + '-> Val Loss: %1.4f  Val accuracy: %3.2f%%  Val oAcc: %3.2f%%  Val IoU: %3.2f%%  best ioU: %3.2f%%' % \
+        #         (loss_val, acc_val, 100*oacc_val, 100*avg_iou_val,100*max(best_iou,avg_iou_val)) + TRAIN_COLOR)
+        #    if avg_iou_val>best_iou: #best score yet on the validation set
+        #        print(BEST_COLOR + '-> New best model achieved!' + TRAIN_COLOR)
+        #        best_iou = avg_iou_val
+        #        new_best_model = True
+        #        torch.save({'epoch': epoch + 1, 'args': args, 'state_dict': model.state_dict(), 'optimizer' : optimizer.state_dict(), 'scaler': scaler},
+        #               os.path.join(modelDir, 'model.pth.tar'))
+        #elif epoch % args.save_nth_epoch == 0 or epoch==args.epochs-1:
+        #        torch.save({'epoch': epoch + 1, 'args': args, 'state_dict': model.state_dict(), 'optimizer' : optimizer.state_dict(), 'scaler': scaler},
+        #               os.path.join(modelDir, 'model.pth.tar'))
         #test every test_nth_epochs
         #or test after each enw model (but skip the first 5 for efficiency)
 
@@ -371,7 +393,8 @@ def main():
         if (not(args.use_val_set) and (epoch+1) % args.test_nth_epoch == 0)  \
            or (args.use_val_set and new_best_model and epoch > 5): 
             " Eval on test set, disabled here cause we haven't test set yet "
-            acc_test, loss_test, oacc_test, avg_iou_test, avg_acc_test = eval(False)
+            # CM = confusion matrix
+            acc_test, loss_test, oacc_test, avg_iou_test, avg_acc_test, CM = eval(False)
             print(TEST_COLOR + '-> Test Loss: %1.4f  Test accuracy: %3.2f%%  Test oAcc: %3.2f%%  Test avgIoU: %3.2f%%' % \
                  (loss_test, acc_test, 100*oacc_test, 100*avg_iou_test) + TRAIN_COLOR)
         else:
@@ -379,19 +402,28 @@ def main():
 
         stats.append({'epoch': epoch, 'acc': acc, 'loss': loss, 'oacc': oacc, 'avg_iou': avg_iou, 'acc_test': acc_test, 'oacc_test': oacc_test, 'avg_iou_test': avg_iou_test, 'avg_acc_test': avg_acc_test, 'best_iou' : best_iou})
 
-        """
         if epoch % args.save_nth_epoch == 0 or epoch==args.epochs-1:
             with open(os.path.join(args.odir, 'trainlog.json'), 'w') as outfile:
                 json.dump(stats, outfile,indent=4)
             torch.save({'epoch': epoch + 1, 'args': args, 'state_dict': model.state_dict(), 'optimizer' : optimizer.state_dict(), 'scaler': scaler},
                        os.path.join(args.odir, 'model.pth.tar'))
-        """
         
         if math.isnan(loss): break
     
+        #Json file format
         if len(stats)>0:
             with open(os.path.join(outDir, 'trainlog.json'), 'w') as outfile:
                 json.dump(stats, outfile, indent=4)
+
+        # Csv file format
+        # Get accuracy for each class
+        acc_per_class = np.zeros(len(CM[0])) 
+        for i in range(np.shape(CM)[0]):
+            acc_per_class[i] = (CM[i, i].sum() / CM[i].sum())*100.
+        if len(stats)>0:
+            with open(statPath, 'a', newline='') as csvfile:
+                spamwriter = csv.writer(csvfile, delimiter=';', quotechar='|', quoting=csv.QUOTE_MINIMAL)
+                spamwriter.writerow(np.concatenate([[epoch, acc_val, loss, oacc, avg_iou, acc_test, oacc_test, avg_iou_test, avg_acc_test, best_iou], acc_per_class]))
 
     if args.use_val_set :
         args.resume = args.odir + '/model.pth.tar'

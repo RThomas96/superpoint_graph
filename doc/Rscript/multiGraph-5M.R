@@ -1,3 +1,4 @@
+library(cowplot)
 library(ggplot2)
 library(ggpubr)
 
@@ -6,45 +7,57 @@ file <- "/home/thomas/Data/Cajun/Data/Evaluation/Methods/superpoint_graph/projec
 dataset <- read.csv2(file, sep=";", stringsAsFactors=FALSE, dec=".")
 
 dataset <- subset(dataset,  Knn.geometric.features == 45)
-#dataset <- subset(dataset, Knn.geometric.features!=45)
 
-#attach(mtcars)
-#par(mfrow=c(2,2)) # For multiple layout
+plots <- list()
 
-# Plot 1
-p1 = ggplot() + geom_line(data=dataset, aes(x=Regularization.strength, y=Total.accuracy, colour="TotalAcc")) 
+addList <- function(myList, value)
+{
+  myList[[length(myList)+1]] <- value
+  return(myList)
+}
 
-p1 = p1 + geom_line(data=dataset, aes(x=Regularization.strength, y=Panneau, colour="Panneau"))
-p1 = p1 + geom_line(data=dataset, aes(x=Regularization.strength, y=Extincteur, colour="Extincteur"))
-p1 = p1 + geom_line(data=dataset, aes(x=Regularization.strength, y=Bac, colour="Bac"))
-p1 = p1 + geom_line(data=dataset, aes(x=Regularization.strength, y=Sol, colour="Sol"))
-p1 = p1 + geom_line(data=dataset, aes(x=Regularization.strength, y=Barriere, colour="Barriere"))
+plot1A <- function(xAxisName, xAxis, yAxisName, yAxis, legendName, yPercentage = FALSE) {
+  # Plot 1
+  p1 = ggplot() 
+  
+  colorValues <- c()
+  i <- 1
+  for(yAx in yAxis)
+  {
+    yname <- yAx[[1]]
+    value <- yAx[[2]]
+    color <- yAx[[3]]
+    p1 = p1 + geom_line(data=dataset, aes(x=xAxis, y=yAxis[[i]][[2]], colour=yAxis[[i]][[1]]))
+    colorValues[yAxis[[i]][[1]]] = yAxis[[i]][[3]]
+    
+    i <- i + 1
+  }
+  
+  
+  #p1 = p1 + geom_line(data=dataset, aes(x=xAxis, y=Total.accuracy, colour="TotalAcc"))
+  #p1 = p1 + geom_line(data=dataset, aes(x=xAxis, y=Panneau, colour="Panneau"))
+  #p1 = p1 + geom_line(data=dataset, aes(x=xAxis, y=Extincteur, colour="Extincteur"))
+  #p1 = p1 + geom_line(data=dataset, aes(x=xAxis, y=Bac, colour="Bac"))
+  #p1 = p1 + geom_line(data=dataset, aes(x=xAxis, y=Sol, colour="Sol"))
+  #p1 = p1 + geom_line(data=dataset, aes(x=xAxis, y=Barriere, colour="Barriere"))
+  
+  #p1 = p1 + scale_color_manual(name = legendName, values = c('TotalAcc' = 'yellow','Panneau' = 'red','Extincteur' = 'darkblue','Bac' = 'green','Sol' = 'pink', 'Barriere' = 'brown')) + labs(color = 'Y series')
+  p1 = p1 + scale_color_manual(name = legendName, values = colorValues) + labs(color = 'Y series')
+  
+  p1 = p1 + scale_x_continuous(xAxisName, breaks = seq(min(xAxis), max(xAxis), by = 0.02))
+  p1 = p1 + scale_y_continuous(yAxisName, breaks = seq(0, 100, by = 10))
+  
+  if(yPercentage)
+  {
+    p1 = p1 + scale_y_continuous(yAxisName, breaks = seq(0, 100, by = 10), labels = function(x) paste0(x, "%"))
+  }
+  
+  return(p1)
+}
 
-p1 = p1 + scale_color_manual(name = "Objets", values = c('TotalAcc' = 'yellow','Panneau' = 'red','Extincteur' = 'darkblue','Bac' = 'green','Sol' = 'pink', 'Barriere' = 'brown')) + labs(color = 'Y series')
+#plot1A()
 
-p1 = p1 + scale_x_continuous("Regularisation strength", breaks = seq(min(dataset$Regularization.strength), max(dataset$Regularization.strength), by = 0.02)) 
-p1 = p1 + scale_y_continuous("Accuracy", breaks = seq(0, 100, by = 10), labels = function(x) paste0(x, "%"))
-
-print(p1)
-
-# Plot 2
-dataset <- read.csv2(file, sep=";", stringsAsFactors=FALSE, dec=".")
-dataset <- subset(dataset,  Knn.geometric.features != 45)
-
-p2 = ggplot() + geom_line(data=dataset, aes(x=Knn.geometric.features, y=Total.accuracy, colour="TotalAcc")) 
-
-p2 = p2 + geom_line(data=dataset, aes(x=Knn.geometric.features, y=Panneau, colour="Panneau"))
-p2 = p2 + geom_line(data=dataset, aes(x=Knn.geometric.features, y=Extincteur, colour="Extincteur"))
-p2 = p2 + geom_line(data=dataset, aes(x=Knn.geometric.features, y=Bac, colour="Bac"))
-p2 = p2 + geom_line(data=dataset, aes(x=Knn.geometric.features, y=Sol, colour="Sol"))
-p2 = p2 + geom_line(data=dataset, aes(x=Knn.geometric.features, y=Barriere, colour="Barriere"))
-
-p2 = p2 + scale_color_manual(name = "Objets", values = c('TotalAcc' = 'yellow','Panneau' = 'red','Extincteur' = 'darkblue','Bac' = 'green','Sol' = 'pink', 'Barriere' = 'brown')) + labs(color = 'Y series')
-
-p2 = p2 + scale_x_continuous("Knn geometric features", breaks = seq(min(dataset$Knn.geometric.features), max(dataset$Knn.geometric.features), by = 2)) 
-p2 = p2 + scale_y_continuous("Accuracy", breaks = seq(0, 100, by = 10), labels = function(x) paste0(x, "%"))
-
-print(p2)
+plots <- addList(plots, plot1A(xAxisName = "Regularization strength", xAxis=dataset$Regularization.strength, yAxisName = "Accuracy", yAxis= list(list("TotalAcc", dataset$Total.accuracy, "yellow"), list("TotalAcc", dataset$Sol, "red"), list("Panneau", dataset$Panneau, "red")), legendName = "Objects", yPercentage = TRUE))
 
 # Plot 3
 dataset <- read.csv2(file, sep=";", stringsAsFactors=FALSE, dec=".")
@@ -55,25 +68,9 @@ p3 = ggplot() + geom_line(data=dataset, aes(x=Regularization.strength, y=Number.
 p3 = p3 + scale_x_continuous("Regularisation strength", breaks = seq(min(dataset$Regularization.strength), max(dataset$Regularization.strength), by = 0.02)) 
 p3 = p3 + scale_y_continuous("Total nb of spp", breaks = seq(min(dataset$Number.of.superpoints), max(dataset$Number.of.superpoints), by = 200000), trans='log10')
 
+#plots <- addList(plots, p3)
+
 print(p3)
-
-# Plot 4
-dataset <- read.csv2(file, sep=";", stringsAsFactors=FALSE, dec=".")
-dataset <- subset(dataset,  Knn.geometric.features != 45)
-
-p4 = ggplot()
-p4 = p4 + geom_line(data=dataset, aes(x=Knn.geometric.features, y=Panneau.1, colour="Panneau"))
-p4 = p4 + geom_line(data=dataset, aes(x=Knn.geometric.features, y=Extincteur.1, colour="Extincteur"))
-p4 = p4 + geom_line(data=dataset, aes(x=Knn.geometric.features, y=Bac.1, colour="Bac"))
-#p4 = p4 + geom_line(data=dataset, aes(x=Knn.geometric.features, y=Sol.1, colour="Sol"))
-p4 = p4 + geom_line(data=dataset, aes(x=Knn.geometric.features, y=Barriere.1, colour="Barriere"))
-
-p4 = p4 + scale_color_manual(name = "Objets", values = c('TotalAcc' = 'yellow','Panneau' = 'red','Extincteur' = 'darkblue','Bac' = 'green','Sol' = 'pink', 'Barriere' = 'brown')) + labs(color = 'Y series')
-
-p4 = p4 + scale_x_continuous("Knn geometric features", breaks = seq(min(dataset$Knn.geometric.features), max(dataset$Knn.geometric.features), by = 2)) 
-p4 = p4 + scale_y_continuous("Nb spp", breaks = seq(0, 45, by = 5), limits = c(0, 45))
-
-print(p4)
 
 # Plot 5
 dataset <- read.csv2(file, sep=";", stringsAsFactors=FALSE, dec=".")
@@ -93,17 +90,8 @@ p5 = p5 + scale_y_continuous("Nb spp", breaks = seq(0, 10000, by = 500), trans='
 
 print(p5)
 
-# Plot 3
-dataset <- read.csv2(file, sep=";", stringsAsFactors=FALSE, dec=".")
-dataset <- subset(dataset, Knn.geometric.features != 45)
+#plots <- addList(plots, p5)
 
-p6 = ggplot() + geom_line(data=dataset, aes(x=Knn.geometric.features, y=Number.of.superpoints, colour="Nb of spp")) 
-
-p6 = p6 + scale_x_continuous("Knn geometric features", breaks = seq(min(dataset$Knn.geometric.features), max(dataset$Knn.geometric.features), by = 2)) 
-p6 = p6 + scale_y_continuous("Total nb of spp", breaks = seq(min(dataset$Number.of.superpoints), max(dataset$Number.of.superpoints), by = 100))
-
-print(p6)
-
-ggarrange(p1, p5, p3, labels = c("KnnGeo=45", "RegStrength=0.03"), ncol = 2, nrow = 3)
+ggarrange(plotlist=plots, labels = c("KnnGeo=45", "RegStrength=0.03"), ncol = 2, nrow = 2)
 dataset <- read.csv2(file, sep=";", stringsAsFactors=FALSE, dec=".")
 ggsave(filename="gg-default.png", device="png", dpi=300)
