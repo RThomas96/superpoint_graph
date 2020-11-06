@@ -32,18 +32,25 @@ class ReportManagerSupervized:
     def getCsvPath(self):
         return self.csvPathTraining if self.train else self.csvPathTesting
 
-    def computeStatsOnSpp(self, i_epoch, components, labels):
+    # TO CLEAN: last parameter specific to stat on spp
+    def computeStatsOnSpp(self, i_epoch, components, labels, direct_labels = False):
         self.epoch = i_epoch
 
         #components = np.array(components, dtype=np.array(dtype=int))
         components = np.array(components)
         self.nbSuperpoints += len(components)
-        self.nbOfPoint += len(labels)
+        if not direct_labels:
+            self.nbOfPoint += len(labels)
+        else:
+            self.nbOfPoint += labels.sum()
         
-        nbPtPerLabelForEachSpp = np.zeros(shape=(len(components), labels.shape[1]))
-        for i, spp in enumerate(components): 
-            for pt in spp:
-                nbPtPerLabelForEachSpp[i] += labels[pt] 
+        if not direct_labels:
+            nbPtPerLabelForEachSpp = np.zeros(shape=(len(components), labels.shape[1]))
+            for i, spp in enumerate(components): 
+                for pt in spp:
+                    nbPtPerLabelForEachSpp[i] += labels[pt] 
+        else:
+            nbPtPerLabelForEachSpp = labels
 
         # Search index of the maximum value for each spp i.e the label in majority 
         labelOfEachSpp = nbPtPerLabelForEachSpp.argmax(1)
