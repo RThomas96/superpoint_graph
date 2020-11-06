@@ -1,10 +1,1 @@
-1  0   0  255 # Bleu         - Sol
-2 255  0   0  # Rouge        - Murs
-3 255 255  0  # Jaune        - Plafond
-4  85 255 127 # Vert-clair   - Panneau
-5 170 255 255 # Bleu-ciel    - Barriere
-6 255 170 127 # Orange-clair - Bac
-7 255  85 255 # Rose         - Boitier
-8 85  255  0  # Jaune-clair  - Extincteur
-9  0  255  0  # Vert         - Telephone
-10  255  20  147  # Rose         - Obstacle
+/home/thomas/Data/Cajun/Data/Data/lpa/dataset/data/versions/V2/colorCode
