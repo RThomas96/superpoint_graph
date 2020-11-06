@@ -39,6 +39,32 @@ def has_labels(labels, dataType):
     else:
         return len(labels) > 0
 
+# Record a set of interval
+class Timer:
+    def __init__(self, step):
+        self.times = np.zeros(step)
+
+    def start(self, step):
+        self.times[step] = time.perf_counter()
+
+    def stop(self, step):
+        self.times[step] =  time.perf_counter() - self.times[step]
+
+    def printTimes(self, names):
+        strTime = ""
+        for i, x in enumerate(self.times):
+            strTime += names[i]
+            strTime += ": " 
+            if x > 60:
+                strTime += str(round(x / 60., 2)) 
+                strTime += "min / "
+            if x > 3600:
+                strTime += str(round(x / 60. / 60., 2)) 
+                strTime += "h / "
+            else:
+                strTime += str(round(x, 2)) 
+                strTime += "s / "
+        print(strTime)
 
 def parseCloudForPointNET(featureFile, graphFile, parseFile):
     """ Preprocesses data by splitting them by components and normalizing."""
@@ -146,7 +172,7 @@ def main(args):
     parser.add_argument('--ver_batch', default=0, type=int, help='Batch size for reading large files, 0 do disable batch loading')
 
     parser.add_argument('-ow', '--overwrite', action='store_true', help='Wether to read existing files or overwrite them')
-    parser.add_argument('--save', action='store_true', help='Wether to read existing files or overwrite them')
+    parser.add_argument('--save', action='store_true', help='Wether to save old files before overwrite them')
     parser.add_argument('--timestamp', action='store_true', help='Create a time stamp with time rather than parameters values')
     parser.add_argument('--keep_features', action='store_true', help='If set, do not recompute feature file')
     parser.add_argument('--voxelize', action='store_true', help='Choose to perform voxelization step or not')
@@ -156,55 +182,44 @@ def main(args):
     if(args.overwrite):
         print("Warning: files will be overwritten !!")
     
+    timer = Timer(4)
+    timer.start(0)
+
     colors = ColorLabelManager()
     n_labels = colors.nbColor
     pathManager = PathManager(args.ROOT_PATH)
+    pathManager.createDirForSppComputation()
+    
     reportManager = ReportManager(pathManager.rootPath, args)
     
-    times = [0.,0.,0.,0.] # Time for computing: features / partition / spg
+    # Init timestamp
+    if args.save:
+        if args.timestamp:
+            timeStamp = datetime.now().strftime("-%d-%m-%Y-%H:%M:%S")
+        else:
+            data = np.array(pandas.read_csv(reportManager.getCsvPath(), sep=';', header=None))
+            timeStamp="-".join(map(str, data[-1][0:5]))
     
-    for folder in pathManager.folders:
-        print("=================\n   "+folder+"\n=================")
+    for dataset in pathManager.dataset:
+        print("=================\n   "+dataset+"\n=================")
         reportManager.train = not reportManager.train
     
-        # Init timestamp
-        if args.save:
-            if args.timestamp:
-                timeStamp = datetime.now().strftime("-%d-%m-%Y-%H:%M:%S")
-            else:
-                data = np.array(pandas.read_csv(reportManager.getCsvPath(), sep=';', header=None))
-                timeStamp="-".join(map(str, data[-1][0:5]))
+        # Refresh timestamp
+        if args.save and args.timestamp:
+            timeStamp = datetime.now().strftime("-%d-%m-%Y-%H:%M:%S")
+
+        for i in range(pathManager.getNbFiles(dataset)):
     
-        for i, fileName in enumerate(pathManager.allDataFileName[folder]):
-    
+            fileName, dataFile, dataType, voxelisedFile, featureFile, spgFile, parseFile = pathManager.getFilesFromDataset(dataset, i)
             #TODO: cause n_labels is reset
             n_labels = colors.nbColor
     
-            dataType = pathManager.allDataFileType[folder][i]
-            dataFolder = pathManager.rootPath + "/data/raw/" + folder + "/" 
-            dataFile = dataFolder + fileName + '.' + dataType
     
-            featureFile  = pathManager.rootPath + "/features/" + folder + "/" + fileName + ".h5" 
-            spgFile  = pathManager.rootPath + "/superpoint_graphs/" + folder + "/" + fileName + ".h5" 
-            parseFile  = pathManager.rootPath + "/parsed/" + folder + "/" + fileName + ".h5"
-    
-            voxelisedFile  = pathManager.rootPath + "/data/voxelised/" + folder + "/" + fileName + "/" + fileName + "-prunned" + str(args.voxel_width).replace(".", "-") + "." + dataType
-            if not args.voxelize:
-                voxelisedFile = dataFile
-            else:
-                mkdirIfNotExist(pathManager.rootPath + "/data/voxelised/" + folder + "/" + fileName)
-    
-            for sub in ["/features", "/superpoint_graphs", "/parsed"] : 
-                mkdirIfNotExist(pathManager.rootPath + sub)
-                for subsub in ["/test", "/train"] : 
-                    mkdirIfNotExist(pathManager.rootPath + sub + subsub)
-            mkdirIfNotExist(pathManager.rootPath + "/reports")
-    
-            print(str(i + 1) + " / " + str(len(pathManager.allDataFileName[folder])) + " ---> "+fileName)
+            print(str(i + 1) + " / " + str(len(pathManager.allDataFileName[dataset])) + " ---> "+fileName)
             tab="   "
     
-            #--- build the geometric feature file h5 file ---
-            if args.keep_features or (os.path.isfile(featureFile) and not args.overwrite) :
+            # Step 1: Features file computation
+            if (os.path.isfile(featureFile) and not args.overwrite) or args.keep_features :
                 print(tab + "Reading the existing feature file...")
                 geof, xyz, rgb, graph_nn, labels = provider.read_features(featureFile)
             else :
@@ -212,41 +227,43 @@ def main(args):
                 if args.save:
                     storePreviousFile(featureFile, timeStamp)
     
+                # Step 1.1: Voxelize the data file 
+                timer.start(1)
                 start = time.perf_counter()
-                if os.path.isfile(voxelisedFile) or not args.voxelize:
-                    print("Voxelised file found, voxelisation step skipped")
-                    print("Read voxelised file")
-                    xyz, rgb, labels, objects = provider.read_file(voxelisedFile, dataType)
+                if args.voxelize:
+                    print("Begin voxelisation step")
+                    if os.path.isfile(voxelisedFile): 
+                        print("Voxelised file found, voxelisation step skipped")
+                        print("Read voxelised file")
+                        xyz, rgb, labels, objects = provider.read_file(voxelisedFile, dataType)
+                    else:
+                        print(tab + "Read {}".format(fileName))
+                        xyz, rgb, labels, objects = provider.read_file(dataFile, dataType)
     
-                    if has_labels(labels, dataType):
-                        print("Labels found")
-                    else :
-                        print("No labels found")
-                        n_labels = 0
-                else :
-                    print(tab + "Read {}".format(fileName))
+                        #---Voxelise to reduce density-------
+                        print(tab + "Reduce point density")
+                        if args.voxel_width > 0:
+                            xyz, rgb, labels = reduceDensity(xyz, args.voxel_width, rgb, labels, n_labels)
+    
+                        print(tab + "Save reduced density")
+                        # BUG HERE !!
+                        # Because labels returned by prune algorithme is a 2D vector
+                        # With for each voxel the number of point of each label
+                        # So label.flatten() return to much information you need to determine the majoritary label
+                        # So use label.argmax(1) that return the index of the max value of each sub array
+
+                        mkdirIfNotExist(pathManager.rootPath + "/data/" + dataset + "-voxelised/")
+                        provider.write_file(voxelisedFile, xyz, rgb, labels.argmax(1), dataType)
+                else:
+                    print("Voxelisation step skipped")
+                    print("Read data file")
                     xyz, rgb, labels, objects = provider.read_file(dataFile, dataType)
     
-                    if has_labels(labels, dataType):
-                        print("Labels found")
-                    else :
-                        print("No labels found")
-                        n_labels = 0
-    
-                    end = time.perf_counter()
-                    times[0] = times[0] + end - start
-                    #---Voxelise to reduce density-------
-                    print(tab + "Reduce point density")
-                    if args.voxel_width > 0:
-                        xyz, rgb, labels = reduceDensity(xyz, args.voxel_width, rgb, labels, n_labels)
-    
-                    print(tab + "Save reduced density")
-                    # BUG HERE !!
-                    # Because labels returned by prune algorithme is a 2D vector
-                    # With for each voxel the number of point of each label
-                    # So label.flatten() return to much information you need to determine the majoritary label
-                    # So use label.argmax(1) that return the index of the max value of each sub array
-                    provider.write_file(voxelisedFile, xyz, rgb, labels.argmax(1), dataType)
+                if has_labels(labels, dataType):
+                    print("Labels found")
+                else :
+                    print("No labels found")
+                    n_labels = 0
     
                 # FIX: color aggregation
                 if colors.aggregation:
@@ -257,20 +274,23 @@ def main(args):
                 
                 start = time.perf_counter()
     
-                #---compute 10 nn graph-------
+                timer.stop(1)
+                # Step 1.2: Compute nn graph
+                timer.start(2)
                 print(tab + "Compute both {}_nn and {}_nn graphs...".format(args.knn_adj, args.knn_geofeatures))
                 graph_nn, target_fea = graphs.compute_graph_nn_2(xyz, args.knn_adj, args.knn_geofeatures)
     
-                #---compute geometric features-------
+                # Step 1.3: Compute geometric features
                 print(tab + "Compute geometric features...")
                 geof = libply_c.compute_geof(xyz, target_fea, args.knn_geofeatures).astype('float32')
-                end = time.perf_counter()
-                times[1] = times[1] + end - start
                 del target_fea
     
+                # Step 1.4: Compute geometric features
                 provider.write_features(featureFile, geof, xyz, rgb, graph_nn, labels)
+                timer.stop(2)
     
-            #--compute the partition------
+            # Step 2: Compute superpoint graph
+            timer.start(3)
             sys.stdout.flush()
             if os.path.isfile(spgFile) and not args.overwrite :
                 print(tab + "Reading the existing superpoint graph file...")
@@ -294,29 +314,21 @@ def main(args):
     
                 # Compute optimisation solution with cut pursuit
                 print(tab + "Resolve optimisation problem...")
-    
                 components, in_component = libcp.cutpursuit(features, graph_nn["source"], graph_nn["target"], graph_nn["edge_weight"], args.reg_strength)
                 if np.array(in_component).sum() == 0:
-                    print("Error: cutpursuit not working")
+                    print("Error: cutpursuit not working, probably due to many duplicate points")
                 components = np.array(components, dtype = 'object')
     
-    
-                end = time.perf_counter()
-                times[2] = times[2] + end - start
     
                 print(tab + "Computation of the SPG...")
                 start = time.perf_counter()
                 graph_sp = graphs.compute_sp_graph(xyz, args.d_se_max, in_component, components, labels, n_labels)
     
                 # Structure graph_sp
-    
                 # "sp_labels" = nb of points per label
                 # Ex: [ 0, 0, 10, 2] --> 10 pt of label 2 and 2 pt of label 3
     
                 reportManager.computeStatsOnSpp(components, graph_sp["sp_labels"])
-    
-                end = time.perf_counter()
-                times[3] = times[3] + end - start
     
                 provider.write_spg(spgFile, graph_sp, components, in_component)
             
@@ -326,8 +338,9 @@ def main(args):
                 parseCloudForPointNET(featureFile, spgFile, parseFile)
     
             # print("Timer : {:0.4f} s / {:0.4f} s / {:0.4f} s ".format(times[0], times[1], times[2]))
-            print(f"Timer : {times[0]:0.4f} s loading files / {times[1]:0.4f} s features / {times[2]:0.4f} s superpoints / {times[3]:0.4f} s graph")
-            times=[0., 0., 0., 0.]
+            timer.stop(3)
+            timer.stop(0)
+            timer.printTimes(["Total", "Voxelisation", "Features", "Superpoint graph"])
     
     reportManager.saveReport()
 
