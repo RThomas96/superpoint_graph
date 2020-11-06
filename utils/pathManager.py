@@ -2,8 +2,8 @@ import os
 from glob import glob
 
 class PathManager : 
-    def __init__(self, args):
-        self.rootPath = os.path.dirname(os.path.realpath(__file__)) + '/../projects/' + args.ROOT_PATH
+    def __init__(self, projectName):
+        self.rootPath = os.path.dirname(os.path.realpath(__file__)) + '/../projects/' + projectName 
         if not os.path.isdir(self.rootPath):
             raise NameError('The root subfolder you indicate doesn\'t exist')
 

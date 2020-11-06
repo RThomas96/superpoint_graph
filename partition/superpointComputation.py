@@ -158,7 +158,7 @@ def main(args):
     
     colors = ColorLabelManager()
     n_labels = colors.nbColor
-    pathManager = PathManager(args)
+    pathManager = PathManager(args.ROOT_PATH)
     reportManager = ReportManager(pathManager.rootPath, args)
     
     times = [0.,0.,0.,0.] # Time for computing: features / partition / spg
