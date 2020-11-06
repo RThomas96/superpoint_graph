@@ -43,7 +43,7 @@ sys.path.append("./utils")
 from colorLabelManager import ColorLabelManager
 from pathManager import PathManager
 
-def main():
+def main(args):
     parser = argparse.ArgumentParser(description='Large-scale Point Cloud Semantic Segmentation with Superpoint Graphs')
 
     parser.add_argument('ROOT_PATH', help='name of the folder containing the data directory')
@@ -127,7 +127,7 @@ def main():
     parser.add_argument('--sp_decoder_config', default="[]", type=str,
                         help='Size of the decoder : sp_embedding -> sp_class. First layer of size sp_embed (* (1+n_ecc_iteration) if concatenation) and last layer is n_classes')
 
-    args = parser.parse_args()
+    args = parser.parse_args(args)
     args.start_epoch = 0
     args.lr_steps = ast.literal_eval(args.lr_steps)
     args.fnet_widths = ast.literal_eval(args.fnet_widths)
@@ -516,4 +516,4 @@ def meter_value(meter):
     return meter.value()[0] if meter.n>0 else 0
 
 if __name__ == "__main__": 
-    main()
+    main(sys.argv[1:])
