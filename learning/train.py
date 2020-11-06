@@ -65,6 +65,7 @@ def main():
     parser.add_argument('--cuda', default=1, type=int, help='Bool, use cuda')
     parser.add_argument('--nworkers', default=0, type=int, help='Num subprocesses to use for data loading. 0 means that the data will be loaded in the main process')
     parser.add_argument('--test_nth_epoch', default=1, type=int, help='Test each n-th epoch during training')
+    parser.add_argument('--test_train_nth_epoch', default=1, type=int, help='Test each n-th epoch during training on training data')
     parser.add_argument('--save_nth_epoch', default=1, type=int, help='Save model each n-th epoch during training')
     parser.add_argument('--test_multisamp_n', default=10, type=int, help='Average logits obtained over runs with different seeds')
 
@@ -367,11 +368,11 @@ def main():
         scheduler.step() 
 
         acc, loss, oacc, avg_iou = train()
+        print(TRAIN_COLOR + '-> Train Loss: %1.4f' % (loss))
 
-        acc_val, loss_val, oacc_val, avg_iou_val, B, C = eval(True)
-        #print(TRAIN_COLOR + '-> Train Loss: %1.4f   Train accuracy: %3.2f%%' % (loss, acc))
-
-        print(TRAIN_COLOR + '-> Train Loss: %1.4f | Valid Loss: %1.4f | Train accuracy: %3.2f%%' % (loss, loss_val, acc_val))
+        if (epoch % args.test_train_nth_epoch == 0):
+            acc_val, loss_val, oacc_val, avg_iou_val, B, C = eval(True)
+            print(TRAIN_COLOR + '-> Train Loss: %1.4f | Valid Loss: %1.4f | Train accuracy: %3.2f%%' % (loss, loss_val, acc_val))
 
         new_best_model = False
         #if args.use_val_set:
@@ -424,7 +425,11 @@ def main():
         if len(stats)>0:
             with open(statPath, 'a', newline='') as csvfile:
                 spamwriter = csv.writer(csvfile, delimiter=';', quotechar='|', quoting=csv.QUOTE_MINIMAL)
-                spamwriter.writerow(np.concatenate([[epoch, acc_val, loss, oacc, avg_iou, acc_test, oacc_test, avg_iou_test, avg_acc_test, best_iou], acc_per_class]))
+                try:
+                    spamwriter.writerow(np.concatenate([[epoch, acc_val, loss, oacc, avg_iou, acc_test, oacc_test, avg_iou_test, avg_acc_test, best_iou], acc_per_class]))
+                except UnboundLocalError:
+                    acc_val, loss_val, oacc_val, avg_iou_val, B, C = eval(True)
+                    spamwriter.writerow(np.concatenate([[epoch, acc_val, loss, oacc, avg_iou, acc_test, oacc_test, avg_iou_test, avg_acc_test, best_iou], acc_per_class]))
 
     if args.use_val_set :
         args.resume = args.odir + '/model.pth.tar'

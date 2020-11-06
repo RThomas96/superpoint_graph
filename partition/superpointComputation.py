@@ -189,10 +189,11 @@ for folder in pathManager.folders:
         spgFile  = pathManager.rootPath + "/superpoint_graphs/" + folder + "/" + fileName + ".h5" 
         parseFile  = pathManager.rootPath + "/parsed/" + folder + "/" + fileName + ".h5"
 
-        mkdirIfNotExist(pathManager.rootPath + "/data/voxelised/" + folder + "/" + fileName)
         voxelisedFile  = pathManager.rootPath + "/data/voxelised/" + folder + "/" + fileName + "/" + fileName + "-prunned" + str(args.voxel_width).replace(".", "-") + "." + dataType
         if not args.voxelize:
             voxelisedFile = dataFile
+        else:
+            mkdirIfNotExist(pathManager.rootPath + "/data/voxelised/" + folder + "/" + fileName)
 
         for sub in ["/features", "/superpoint_graphs", "/parsed"] : 
             mkdirIfNotExist(pathManager.rootPath + sub)
