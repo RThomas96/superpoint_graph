@@ -55,16 +55,20 @@ class Timer:
         for i, x in enumerate(self.times):
             strTime += names[i]
             strTime += ": " 
-            if x > 60:
-                strTime += str(round(x / 60., 2)) 
-                strTime += "min / "
             if x > 3600:
                 strTime += str(round(x / 60. / 60., 2)) 
                 strTime += "h / "
+            elif x > 60:
+                strTime += str(round(x / 60., 2)) 
+                strTime += "min / "
             else:
                 strTime += str(round(x, 2)) 
                 strTime += "s / "
         print(strTime)
+
+    def reset(self):
+        for i in self.times:
+            i = 0
 
 def parseCloudForPointNET(featureFile, graphFile, parseFile):
     """ Preprocesses data by splitting them by components and normalizing."""
@@ -183,7 +187,6 @@ def main(args):
         print("Warning: files will be overwritten !!")
     
     timer = Timer(4)
-    timer.start(0)
 
     colors = ColorLabelManager()
     n_labels = colors.nbColor
@@ -210,10 +213,10 @@ def main(args):
 
         for i in range(pathManager.getNbFiles(dataset)):
     
+            timer.start(0)
             fileName, dataFile, dataType, voxelisedFile, featureFile, spgFile, parseFile = pathManager.getFilesFromDataset(dataset, i)
             #TODO: cause n_labels is reset
             n_labels = colors.nbColor
-    
     
             print(str(i + 1) + " / " + str(len(pathManager.allDataFileName[dataset])) + " ---> "+fileName)
             tab="   "
@@ -229,7 +232,6 @@ def main(args):
     
                 # Step 1.1: Voxelize the data file 
                 timer.start(1)
-                start = time.perf_counter()
                 if args.voxelize:
                     print("Begin voxelisation step")
                     if os.path.isfile(voxelisedFile): 
@@ -272,8 +274,6 @@ def main(args):
                 #else:
                 #    labels = np.array([label+1 for label in labels])
                 
-                start = time.perf_counter()
-    
                 timer.stop(1)
                 # Step 1.2: Compute nn graph
                 timer.start(2)
@@ -299,7 +299,6 @@ def main(args):
                 if args.save:
                     storePreviousFile(spgFile, timeStamp)
                 #--- build the spg h5 file --
-                start = time.perf_counter()
     
                 # Add rgb to geometric feature to influence superpoint computation
                 features = addRGBToFeature(geof, rgb) 
@@ -321,7 +320,6 @@ def main(args):
     
     
                 print(tab + "Computation of the SPG...")
-                start = time.perf_counter()
                 graph_sp = graphs.compute_sp_graph(xyz, args.d_se_max, in_component, components, labels, n_labels)
     
                 # Structure graph_sp
@@ -337,10 +335,10 @@ def main(args):
             else:
                 parseCloudForPointNET(featureFile, spgFile, parseFile)
     
-            # print("Timer : {:0.4f} s / {:0.4f} s / {:0.4f} s ".format(times[0], times[1], times[2]))
             timer.stop(3)
             timer.stop(0)
             timer.printTimes(["Total", "Voxelisation", "Features", "Superpoint graph"])
+            timer.reset()
     
     reportManager.saveReport()
 
