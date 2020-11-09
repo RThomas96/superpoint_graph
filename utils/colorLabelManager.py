@@ -9,8 +9,8 @@ class ColorLabelManager:
                 self.colorDict, self.labelDict, self.nameDict, self.aggregationDict = self.parseColorFile()
                 #self.nbColor = len(self.colorDict)
                 self.nbColor = len(self.aggregationDict)
-                self.aggregation = True if max([len(x) for x in self.aggregationDict.values()]) > 1 else False
-                if self.aggregation:
+                self.needAggregation = True if max([len(x) for x in self.aggregationDict.values()]) > 1 else False
+                if self.needAggregation:
                         self.aggregateDict()
 
         def parseColorFile(self):

@@ -50,7 +50,7 @@ class Timer:
     def stop(self, step):
         self.times[step] =  time.perf_counter() - self.times[step]
 
-    def printTimes(self, names):
+    def getFormattedTimer(self, names):
         strTime = ""
         for i, x in enumerate(self.times):
             strTime += names[i]
@@ -64,7 +64,7 @@ class Timer:
             else:
                 strTime += str(round(x, 2)) 
                 strTime += "s / "
-        print(strTime)
+        return strTime
 
     def reset(self):
         for i in self.times:
@@ -193,7 +193,7 @@ def main(args):
     pathManager = PathManager(args.ROOT_PATH)
     pathManager.createDirForSppComputation()
     
-    reportManager = ReportManager(pathManager.rootPath, args)
+    reportManager = ReportManager(pathManager.sppCompReportPath, args, n_labels+1)
     
     # Init timestamp
     if args.save:
@@ -205,7 +205,6 @@ def main(args):
     
     for dataset in pathManager.dataset:
         print("=================\n   "+dataset+"\n=================")
-        reportManager.train = not reportManager.train
     
         # Refresh timestamp
         if args.save and args.timestamp:
@@ -268,7 +267,7 @@ def main(args):
                     n_labels = 0
     
                 # FIX: color aggregation
-                if colors.aggregation:
+                if colors.needAggregation:
                     colors.aggregateLabels(labels)
                 # Not needed anymore cause the label 0 is now the unknown label
                 #else:
@@ -326,8 +325,6 @@ def main(args):
                 # "sp_labels" = nb of points per label
                 # Ex: [ 0, 0, 10, 2] --> 10 pt of label 2 and 2 pt of label 3
     
-                reportManager.computeStatsOnSpp(components, graph_sp["sp_labels"])
-    
                 provider.write_spg(spgFile, graph_sp, components, in_component)
             
             if os.path.isfile(parseFile) and not args.overwrite :
@@ -337,10 +334,23 @@ def main(args):
     
             timer.stop(3)
             timer.stop(0)
-            timer.printTimes(["Total", "Voxelisation", "Features", "Superpoint graph"])
+            formattedTimer = timer.getFormattedTimer(["Total", "Voxelisation", "Features", "Superpoint graph"])
+            print(formattedTimer)
+            f = open(pathManager.localReportPath+"/sppComputationBenchmark.report", "a")
+            f.write(fileName+"\n")
+            f.write(formattedTimer+"\n\n")
+            f.close()
             timer.reset()
+
+            isTrainDataset = (dataset == "train")
+            reportManager.train = isTrainDataset 
+            reportManager.computeStatsOnSpp(components, graph_sp["sp_labels"])
     
-    reportManager.saveReport()
+        isTrainDataset = (dataset == "train")
+        reportManager.train = isTrainDataset 
+        pathManager.saveCsvReport(reportManager.getCsvReport(isTrainDataset), isTrainDataset)
+
+    pathManager.saveGeneralReport(reportManager.getFormattedReport())
 
 if __name__ == "__main__":
     main(sys.argv[1:])
