@@ -30,6 +30,42 @@ from sklearn.decomposition import PCA
 
 from pudb import set_trace 
 
+def reduceDensity(inFile, outFile, voxel_width, regular_density = True):
+
+    filter=""
+    if regular_density:
+        filter= """
+        {
+            "type":"filters.voxelcenternearestneighbor",
+            "cell":"%s"
+        },
+        """ % (voxel_width)
+    else:
+        filter= """
+        {
+            "type":"filters.voxelcentroidnearestneighbor",
+            "cell":"%s"
+        },
+        """ % (voxel_width)
+
+    json = """
+    [
+        "%s",
+    """ % (inFile)
+    
+    json += filter
+    
+    json += """
+        {
+            "type":"writers.las",
+            "filename":"%s",
+            "forward":"all"
+        }
+    ]
+    """ % (outFile)
+    pipeline = pdal.Pipeline(json)
+    count = pipeline.execute()
+
 #------------------------------------------------------------------------------
 def transition2ply(filename, xyz, edge_source, is_transition):
     """write a ply with random colors for each components for only a specific label"""

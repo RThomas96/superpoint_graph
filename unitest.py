@@ -21,8 +21,9 @@ if not args.keep:
         if directory != "data":
             shutil.rmtree(os.path.join(rootDir,directory))
             print(directory, end=" ")
+
     print("")
 
-superpointComputation(["test"])
+superpointComputation(["test", "--voxelize", "--voxel_width", "0.1", "-ow", "--keep_density"])
 
 train(["test", "--epoch", "5"])

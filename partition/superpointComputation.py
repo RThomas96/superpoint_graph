@@ -5,6 +5,7 @@
     Script for partioning into simples shapes and prepare data
 """
 
+import pdal
 import pandas
 import random
 import os.path
@@ -136,17 +137,6 @@ def parseCloudForPointNET(featureFile, graphFile, parseFile):
             # For all points in the superpoint ( the set of index "idx"), get all correspondant parsed data and add it to the file
             parsedFile.create_dataset(name='{:d}'.format(components), data=parsedData[idx,...])
 
-def reduceDensity(xyz, voxel_width, rgb, labels, n_labels):
-    asNoLabel = False
-    if len(labels) == 0:
-        asNoLabel = True
-        labels = np.array([]) 
-        n_labels = 0
-    xyz, rgb, labels, dump = libply_c.prune(xyz, args.voxel_width, rgb, labels, np.zeros(1, dtype='uint8'), n_labels, 0)
-    if asNoLabel:
-        labels = np.array([]) 
-    return xyz, rgb, labels
-
 def storePreviousFile(fileFullName, timeStamp):
     if(os.path.isfile(fileFullName)):
         fileName   = os.path.splitext(os.path.basename(fileFullName))[0]
@@ -180,6 +170,7 @@ def main(args):
     parser.add_argument('--timestamp', action='store_true', help='Create a time stamp with time rather than parameters values')
     parser.add_argument('--keep_features', action='store_true', help='If set, do not recompute feature file')
     parser.add_argument('--voxelize', action='store_true', help='Choose to perform voxelization step or not')
+    parser.add_argument('--keep_density', action='store_true', help='Voxelize cloud and keep original density')
     
     args = parser.parse_args(args)
     
@@ -225,7 +216,6 @@ def main(args):
                 print(tab + "Reading the existing feature file...")
                 geof, xyz, rgb, graph_nn, labels = provider.read_features(featureFile)
             else :
-                # FIX: voxelisation
                 if args.save:
                     storePreviousFile(featureFile, timeStamp)
     
@@ -233,38 +223,28 @@ def main(args):
                 timer.start(1)
                 if args.voxelize:
                     print("Begin voxelisation step")
-                    if os.path.isfile(voxelisedFile): 
+                    if os.path.isfile(voxelisedFile) and not args.overwrite: 
                         print("Voxelised file found, voxelisation step skipped")
                         print("Read voxelised file")
-                        xyz, rgb, labels, objects = provider.read_file(voxelisedFile, dataType)
                     else:
-                        print(tab + "Read {}".format(fileName))
-                        xyz, rgb, labels, objects = provider.read_file(dataFile, dataType)
-    
-                        #---Voxelise to reduce density-------
                         print(tab + "Reduce point density")
+                        mkdirIfNotExist(pathManager.rootPath + "/data/" + dataset + "-voxelised/")
                         if args.voxel_width > 0:
-                            xyz, rgb, labels = reduceDensity(xyz, args.voxel_width, rgb, labels, n_labels)
+                            provider.reduceDensity(dataFile, voxelisedFile, args.voxel_width, False if args.keep_density else True)
     
                         print(tab + "Save reduced density")
-                        # BUG HERE !!
-                        # Because labels returned by prune algorithme is a 2D vector
-                        # With for each voxel the number of point of each label
-                        # So label.flatten() return to much information you need to determine the majoritary label
-                        # So use label.argmax(1) that return the index of the max value of each sub array
-
-                        mkdirIfNotExist(pathManager.rootPath + "/data/" + dataset + "-voxelised/")
-                        provider.write_file(voxelisedFile, xyz, rgb, labels.argmax(1), dataType)
+                    dataFile = voxelisedFile
                 else:
                     print("Voxelisation step skipped")
                     print("Read data file")
-                    xyz, rgb, labels, objects = provider.read_file(dataFile, dataType)
     
+                xyz, rgb, labels, objects = provider.read_file(dataFile, dataType)
                 if has_labels(labels, dataType):
                     print("Labels found")
                 else :
                     print("No labels found")
                     n_labels = 0
+                    labels = np.array([])
     
                 # FIX: color aggregation
                 if colors.needAggregation:
