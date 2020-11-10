@@ -93,6 +93,24 @@ def transition2ply(filename, xyz, edge_source, is_transition):
     ply = PlyData([PlyElement.describe(vertex_all, 'vertex')], text=True)
     ply.write(filename)
 #------------------------------------------------------------------------------
+def transition2laz(filename, xyz, edge_source, is_transition):
+    """write a ply with random colors for each components for only a specific label"""
+
+    red=np.array([255, 0, 0])
+    blue=np.array([0, 0, 255])
+
+    prop = [('x', 'f4'), ('y', 'f4'), ('z', 'f4'), ('red', 'u1')
+    , ('green', 'u1'), ('blue', 'u1')]
+
+    transitions = np.array([is_transition==1]).nonzero()[1]
+
+    transitionsIdx = edge_source[transitions] 
+
+    color = np.zeros(xyz.shape)
+    color[:] = blue
+    color[transitionsIdx] = red
+    write_laz_simple(filename, xyz, color)
+#------------------------------------------------------------------------------
 def partition2plyfilter(filename, xyz, components, labels, filterLabel):
     """write a ply with random colors for each components for only a specific label"""
 
@@ -118,6 +136,22 @@ def partition2plyfilter(filename, xyz, components, labels, filterLabel):
         vertex_all[prop[i+3][0]] = color[:, i]
     ply = PlyData([PlyElement.describe(vertex_all, 'vertex')], text=True)
     ply.write(filename)
+#------------------------------------------------------------------------------
+def partition2lazfilter(filename, xyz, components, labels, filterLabel):
+    """write a ply with random colors for each components for only a specific label"""
+
+    labelOfEachSpp = labels.argmax(1)
+    idxOfFilteredSpp = np.argwhere(labelOfEachSpp==int(filterLabel)).flatten()
+    components=components[idxOfFilteredSpp]
+
+    random_color = lambda: random.randint(0, 255)
+    color = np.zeros(xyz.shape)
+    for i_com in range(0, len(components)):
+        color[components[i_com], :] = [random_color(), random_color()
+        , random_color()]
+    prop = [('x', 'f4'), ('y', 'f4'), ('z', 'f4'), ('red', 'u1')
+    , ('green', 'u1'), ('blue', 'u1')]
+    write_laz_simple(filename, xyz, color)
 #------------------------------------------------------------------------------
 def partition2ply(filename, xyz, components):
     """write a ply with random colors for each components"""
@@ -174,6 +208,19 @@ def geofstd2laz(filename, xyz, geof, components, in_component):
 
     color = componentsColor[np.array(in_component)]
 
+    write_laz_simple(filename, xyz, color)
+#------------------------------------------------------------------------------
+def prediction2laz(filename, xyz, prediction):
+    """write a ply with colors for each class"""
+    colorLabelManager = ColorLabelManager()
+    n_label = colorLabelManager.nbColor
+    if len(prediction.shape) > 1 and prediction.shape[1] > 1:
+        prediction = np.argmax(prediction, axis = 1)
+    color = np.zeros(xyz.shape)
+    for i_label in range(0, n_label): # +1 here cause n_label do not count the 0 label 
+        #color[np.where(prediction == i_label), :] = get_color_from_label(i_label, dataset)
+        color[np.where(prediction == i_label), :] = colorLabelManager.labelDict[i_label+1] 
+    prop = [('x', 'f4'), ('y', 'f4'), ('z', 'f4'), ('red', 'u1'), ('green', 'u1'), ('blue', 'u1')]
     write_laz_simple(filename, xyz, color)
 #------------------------------------------------------------------------------
 def prediction2ply(filename, xyz, prediction):
@@ -452,6 +499,9 @@ def write_laz_labels(filename, xyz, rgb, labels):
         vertex_all[prop[i_prop+3][0]] = rgb[:, i_prop]
     vertex_all[prop[6][0]] = labels
 
+    # Create empty dir if needed
+    os.makedirs(os.path.split(filename)[0], exist_ok=True)
+
     # Write our data to an LAZ file
     output =u"""{
       "pipeline":[
@@ -482,7 +532,8 @@ def write_laz_simple(filename, xyz, rgb):
     for i_prop in range(0, 3):
         vertex_all[prop[i_prop+3][0]] = rgb[:, i_prop]
 
-    #ply = PlyData([PlyElement.describe(vertex_all, 'vertex')], text=True)
+    # Create folders
+    os.makedirs(os.path.split(filename)[0], exist_ok=True)
 
     # Write our data to an LAZ file
     output =u"""{

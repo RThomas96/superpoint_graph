@@ -5,6 +5,7 @@ import shutil
 sys.path.append("./partition/")
 sys.path.append("./learning/")
 from superpointComputation import main as superpointComputation 
+from visualize_result import main as visualize
 from train import main as train 
 
 parser = argparse.ArgumentParser(description='Superpoint computation programm')
@@ -24,6 +25,8 @@ if not args.keep:
 
     print("")
 
-superpointComputation(["test", "--voxelize", "--voxel_width", "0.1", "-ow", "--keep_density"])
+superpointComputation(["test", "--voxelize", "--voxel_width", "0.1"])
 
 train(["test", "--epoch", "5"])
+
+visualize(["test", "test", "LPA3-1", "--outType", "sptgd"])

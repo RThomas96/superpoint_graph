@@ -441,7 +441,7 @@ def main(args):
     if args.test_multisamp_n>0 and 'test' in args.db_test_name:
         acc_test, oacc_test, avg_iou_test, per_class_iou_test, predictions_test, avg_acc_test, confusion_matrix = eval_final()
         print('-> Multisample {}: Test accuracy: {}, \tTest oAcc: {}, \tTest avgIoU: {}, \tTest mAcc: {}'.format(args.test_multisamp_n, acc_test, oacc_test, avg_iou_test, avg_acc_test))
-        with h5py.File(os.path.join(outDir, 'predictions_'+args.db_test_name+'.h5'), 'w') as hf:
+        with h5py.File(os.path.join(outDir, 'predictions.h5'), 'w') as hf:
             for fname, o_cpu in predictions_test.items():
                 hf.create_dataset(name=fname, data=o_cpu) #(0-based classes)
         with open(os.path.join(outDir, 'scores_'+args.db_test_name+'.json'), 'w') as outfile:

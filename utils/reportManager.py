@@ -175,3 +175,10 @@ class ReportManager:
         report += "Testing: {} \n".format(self.getNamedDict(self.nbOfSppPerClass, 1))
 
         return report
+
+    def getPredictionFile(fileName):
+        outPredFileName = fileName + "_pred.ply"
+        outPredFile   = root + "/visualisation/predictions/" + fileName 
+        Path(root + "/visualisation/predictions/" + args.predFileName).mkdir(parents=True, exist_ok=True)
+
+

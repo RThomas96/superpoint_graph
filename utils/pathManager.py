@@ -26,7 +26,10 @@ class PathManager :
         self.sppCompTrainingCsv = self.sppCompReportPath + "/statsTraining.csv"
         self.sppCompTestingCsv = self.sppCompReportPath + "/statsTesting.csv"
 
+        # Result hierarchy
+        self.predictionFile = self.rootPath + "/results/predictions.h5"
 
+        # Datasets hierarchy
         self.dataset = ["test", "train"]
 
         self.allDataFileName = {}
@@ -56,6 +59,9 @@ class PathManager :
                 #raise FileNotFoundError("Data folder is empty or do not contain {} format files".format(dataType))
 
     def getFilesFromDataset(self, dataset, i):
+        # If i is a file name instead of an index
+        if isinstance(i, str):
+            i = self.allDataFileName[dataset].index(i)
         fileName = self.allDataFileName[dataset][i]
         dataType = self.allDataFileType[dataset][i]
         dataFile = self.rootPath + "/data/" + dataset + "/" + fileName + '.' + dataType
@@ -67,6 +73,21 @@ class PathManager :
         voxelisedFile  = self.rootPath + "/data/" + dataset + "-voxelised/" + fileName + '.' + dataType
         #voxelisedFile  = self.rootPath + "/data/voxelised/" + dataset + "/" + fileName + "/" + fileName + "-prunned" + str(args.voxel_width).replace(".", "-") + "." + dataType
         return fileName, dataFile, dataType, voxelisedFile, featureFile, spgFile, parseFile
+
+    def getVisualisationFilesFromDataset(self, dataset, i):
+        # If i is a file name instead of an index
+        if isinstance(i, str):
+            i = self.allDataFileName[dataset].index(i)
+        fileName = self.allDataFileName[dataset][i]
+        #dataType = self.allDataFileType[dataset][i]
+    
+        sppFile   = self.rootPath + "/visualisation/superpoints/" + fileName + "_spp.laz"
+        predictionFile   = self.rootPath + "/visualisation/predictions/" + fileName + "_pred.laz"
+        transFile   = self.rootPath + "/visualisation/features/" + fileName + "_trans.laz"
+        geofFile   = self.rootPath + "/visualisation/features/" + fileName + "_geof.laz"
+        stdFile   = self.rootPath + "/visualisation/features/" + fileName  + "_std.laz"
+
+        return sppFile, predictionFile, transFile, geofFile, stdFile 
 
     def getNbFiles(self, dataset):
         return len(self.allDataFileName[dataset])

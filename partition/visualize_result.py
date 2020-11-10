@@ -16,9 +16,14 @@ import provider
 
 sys.path.append("./supervized_partition/")
 import graph_processing as graph
+from pathManager import PathManager
 
-def openPredictions(res_file, h5FolderPath):
+def openPredictions(res_file, h5FolderPath, components, xyz):
     try:
+        h5FileFolders = list(provider.h5py.File(res_file, 'r').keys())
+        if not os.path.split(h5FolderPath)[0] in h5FileFolders:
+            print("%s does not exist in %s" % (h5FolderPath, res_file))
+            raise ValueError("%s does not exist in %s" % (h5FolderPath, res_file))
         pred_red  = np.array(provider.h5py.File(res_file, 'r').get(h5FolderPath))        
         if (len(pred_red) != len(components)):
             print(len(pred_red))
@@ -28,128 +33,68 @@ def openPredictions(res_file, h5FolderPath):
     except OSError:
         raise ValueError("%s does not exist in %s" % (h5FolderPath, res_file))
 
-parser = argparse.ArgumentParser(description='Generate ply file from prediction file')
-parser.add_argument('ROOT_PATH', help='Folder name which contains data')
-parser.add_argument('predFileName', help='Name of the prediction file used, they are store at /results/ folder')
-parser.add_argument('file_path', help='Full path of file to display, from data folder, must be "test/X"')
-parser.add_argument('-ow', '--overwrite', action='store_true', help='Wether to read existing files or overwrite them')
-parser.add_argument('--supervized', action='store_true', help='Wether to read existing files or overwrite them')
-parser.add_argument('--outType', default='p', help='which cloud to output: s = superpoints, p = predictions, t = transitions (only for supervized partitions), g = geof, d = geof std')
-parser.add_argument('--filter_label', help='Output only SPP with a specific label')
-parser.add_argument('--log', help='Files are read from log directory, you can set some REG_STRENGTH value to choose which file to choose')
-args = parser.parse_args()
+def main(args):
+    parser = argparse.ArgumentParser(description='Generate ply file from prediction file')
+    parser.add_argument('ROOT_PATH', help='Folder name which contains data')
+    parser.add_argument('dataset', help='Full path of file to display, from data folder, must be "test/X"')
+    parser.add_argument('fileName', help='Full path of file to display, from data folder, must be "test/X"')
+    parser.add_argument('-ow', '--overwrite', action='store_true', help='Wether to read existing files or overwrite them')
+    parser.add_argument('--supervized', action='store_true', help='Wether to read existing files or overwrite them')
+    parser.add_argument('--outType', default='p', help='which cloud to output: s = superpoints, p = predictions, t = transitions (only for supervized partitions), g = geof, d = geof std')
+    parser.add_argument('--filter_label', help='Output only SPP with a specific label')
+    parser.add_argument('--log', help='Files are read from log directory, you can set some REG_STRENGTH value to choose which file to choose')
 
-outSuperpoints = 's' in args.outType
-outPredictions = 'p' in args.outType
-outTransitions = 't' in args.outType
-outGeof = 'g' in args.outType
-outStd = 'd' in args.outType
-#---path to data---------------------------------------------------------------
-root = os.path.dirname(os.path.realpath(__file__)) + '/../projects/' + args.ROOT_PATH
+    args = parser.parse_args(args)
+    
+    outSuperpoints = 's' in args.outType
+    outPredictions = 'p' in args.outType
+    outTransitions = 't' in args.outType
+    outGeof = 'g' in args.outType
+    outStd = 'd' in args.outType
+    
+    pathManager = PathManager(args.ROOT_PATH)
+    
+    #if args.log is not None:
+    #    folder = os.path.split(args.file_path)[0] + '/log/'
+    #    file_name = os.path.split(args.file_path)[1] + args.log +"-1.0-45-10-1000000.log"
+    #else:
+    #    folder = os.path.split(args.file_path)[0] + '/'
+    #    file_name = os.path.split(args.file_path)[1]
+    
+    fileName, dataFile, dataType, voxelisedFile, featureFile, spgFile, parseFile = pathManager.getFilesFromDataset(args.dataset, args.fileName)
+    res_file = pathManager.predictionFile 
+    
+    sppFile, predictionFile, transFile, geofFile, stdFile = pathManager.getVisualisationFilesFromDataset(args.dataset, args.fileName)
+    
+    #if args.supervized:
+    #    xyz, rgb, edg_source, edg_target, is_transition, local_geometry, labels, objects, elevation, xyn = graph.read_structure(supervized_fea_file, False)
+    #else:
+    geof, xyz, rgb, graph_nn, labels = provider.read_features(featureFile)
+    
+    graph_spg, components, in_component = provider.read_spg(spgFile)
+    
+    if outStd:
+        provider.geofstd2laz(stdFile, xyz, geof, components, in_component)
+    
+    if outGeof:
+        provider.geof2laz(geofFile, xyz, geof)
+    
+    if args.supervized and outTransitions:
+        provider.transition2laz(transFile, xyz, edg_source, is_transition)
+    
+    if outPredictions:
+        try:
+            pred_full = openPredictions(res_file, args.dataset + "/" + fileName, components, xyz)
+            provider.prediction2laz(predictionFile, xyz, pred_full)
+        except ValueError:
+            print("Can't visualize predictions")
+    
+    if outSuperpoints and args.filter_label is not None:
+        print("Filter activated")
+        provider.partition2lazfilter(sppFile, xyz, components, graph_spg["sp_labels"], args.filter_label)
+    
+    if outSuperpoints and args.filter_label is None:
+        provider.partition2laz(sppFile, xyz, components)
 
-if args.log is not None:
-    folder = os.path.split(args.file_path)[0] + '/log/'
-    file_name = os.path.split(args.file_path)[1] + args.log +"-1.0-45-10-1000000.log"
-else:
-    folder = os.path.split(args.file_path)[0] + '/'
-    file_name = os.path.split(args.file_path)[1]
-
-h5FolderPath = folder + file_name
-
-fea_file   = root + "/features/"          + folder + file_name + '.h5'
-supervized_fea_file   = root + "/features_supervized/"          + folder + file_name + '.h5'
-spg_file   = root + "/superpoint_graphs/" + folder + file_name + '.h5'
-res_file   = root + "/results/" + args.predFileName + '.h5'
-
-outPredFileName = file_name + "_pred.ply"
-outPredFile   = root + "/visualisation/predictions/" + args.predFileName + "/" + outPredFileName 
-Path(root + "/visualisation/predictions/" + args.predFileName).mkdir(parents=True, exist_ok=True)
-
-outSPntFileName = file_name + "_partition.laz"
-outSPntFile   = root + "/visualisation/superpoints/" + outSPntFileName 
-Path(root + "/visualisation/superpoints/" + args.predFileName).mkdir(parents=True, exist_ok=True)
-
-outTransFileName = file_name + "_transition.ply"
-outTransFile   = root + "/visualisation/transitions/" + outTransFileName 
-Path(root + "/visualisation/transitions/" + args.predFileName).mkdir(parents=True, exist_ok=True)
-
-outGeofFileName = file_name + "_geof.laz"
-outGeofFile   = root + "/visualisation/features/" + outGeofFileName 
-Path(root + "/visualisation/features/" + args.predFileName).mkdir(parents=True, exist_ok=True)
-
-outStdFileName = file_name + "_std.laz"
-outStdFile   = root + "/visualisation/features/" + outStdFileName 
-Path(root + "/visualisation/features/" + args.predFileName).mkdir(parents=True, exist_ok=True)
-
-if args.supervized:
-    fea_file = supervized_fea_file
-
-if not os.path.isfile(fea_file) :
-    raise ValueError("%s does not exist and is needed" % fea_file)
-if not os.path.isfile(spg_file) and not outTransitions:    
-    raise ValueError("%s does not exist and is needed to output the partition  or result ply" % spg_file) 
-if outPredictions and not os.path.isfile(res_file):
-    raise ValueError("%s does not exist and is needed to output the result ply" % res_file) 
-
-if args.supervized:
-    xyz, rgb, edg_source, edg_target, is_transition, local_geometry, labels, objects, elevation, xyn = graph.read_structure(supervized_fea_file, False)
-else:
-    geof, xyz, rgb, graph_nn, labels = provider.read_features(fea_file)
-
-if not outTransitions:
-    graph_spg, components, in_component = provider.read_spg(spg_file)
-
-if outPredictions:
-    pred_full = openPredictions(res_file, folder + file_name)
-
-#if not bool(args.upsample):
-def checkIfExist(file, fileName):
-    if os.path.isfile(file) and not args.overwrite:
-        print("{} result file already exist and overwrite option isn't set".format(fileName))
-        print("Nothing to do")
-        return False
-    elif os.path.isfile(file):
-        print("{} result file already exist and will be OVERWRITE".format(fileName))
-    else :
-        print("writing the file {}...".format(fileName))
-    return True
-
-if outStd:
-    if checkIfExist(outStdFile, outStdFileName):
-        provider.geofstd2laz(outStdFile, xyz, geof, components, in_component)
-
-if outGeof:
-    if checkIfExist(outGeofFile, outGeofFileName):
-        provider.geof2laz(outGeofFile, xyz, geof)
-
-if outTransitions:
-    if checkIfExist(outTransFile, outTransFileName):
-        provider.transition2ply(outTransFile, xyz, edg_source, is_transition)
-
-if outPredictions:
-    if checkIfExist(outPredFile, outPredFileName):
-        provider.prediction2ply(outPredFile, xyz, pred_full)
-
-if outSuperpoints and args.filter_label is not None:
-    print("Filter activated")
-    if checkIfExist(outSPntFile, outSPntFileName):
-        provider.partition2plyfilter(outSPntFile, xyz, components, graph_spg["sp_labels"], args.filter_label)
-
-if outSuperpoints and args.filter_label is None:
-    if checkIfExist(outSPntFile, outSPntFileName):
-        provider.partition2laz(outSPntFile, xyz, components)
-
-#if bool(args.upsample):
-#    if args.dataset=='s3dis':
-#        data_file   = root + 'data/' + folder + file_name + '/' + file_name + ".txt"
-#        xyz_up, rgb_up = read_s3dis_format(data_file, False)
-#    elif args.dataset=='sema3d':#really not recommended unless you are very confident in your hardware
-#        data_file  = data_folder + file_name + ".txt"
-#        xyz_up, rgb_up = read_semantic3d_format(data_file, 0, '', 0, args.ver_batch)
-#    elif args.dataset=='custom_dataset':
-#        data_file  = data_folder + file_name + ".ply"
-#        xyz_up, rgb_up = read_ply(data_file)
-#    del rgb_up
-#    pred_up = interpolate_labels(xyz_up, xyz, pred_full, args.ver_batch)
-#    print("writing the upsampled prediction file...")
-#    prediction2ply(ply_file + "_pred_up.ply", xyz_up, pred_up+1, n_labels, args.dataset)
+if __name__ == "__main__":
+    main(sys.argv[1:])
