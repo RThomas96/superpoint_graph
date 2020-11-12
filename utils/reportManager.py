@@ -95,13 +95,13 @@ class ReportManager:
 
     def getNamedDict(self, values, i = -1):
         colorLabelManager = ColorLabelManager()
-        nameDict = colorLabelManager.nameDict
+        label2Name = colorLabelManager.label2Name
         if i == -1:
             i = 0 if self.train else 1
         renamedDict = {} 
-        for key in nameDict.keys():
-            if values[i][int(key)] > 0:
-                renamedDict[nameDict[key]] = values[i][key]
+        for label in label2Name.keys():
+            if values[i][int(label)] > 0:
+                renamedDict[label2Name[label]] = values[i][label]
         return renamedDict
 
     def getCsvReport(self, getTraining):

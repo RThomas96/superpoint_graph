@@ -219,7 +219,9 @@ def prediction2laz(filename, xyz, prediction):
     color = np.zeros(xyz.shape)
     for i_label in range(0, n_label): # +1 here cause n_label do not count the 0 label 
         #color[np.where(prediction == i_label), :] = get_color_from_label(i_label, dataset)
-        color[np.where(prediction == i_label), :] = colorLabelManager.labelDict[i_label+1] 
+
+        # There is a +1 here cause the unknow label 0 isn't pass to the network so the first label become the label 1
+        color[np.where(prediction == i_label), :] = colorLabelManager.label2Color[i_label+1]
     prop = [('x', 'f4'), ('y', 'f4'), ('z', 'f4'), ('red', 'u1'), ('green', 'u1'), ('blue', 'u1')]
     write_laz_simple(filename, xyz, color)
 #------------------------------------------------------------------------------
@@ -232,7 +234,7 @@ def prediction2ply(filename, xyz, prediction):
     color = np.zeros(xyz.shape)
     for i_label in range(0, n_label): # +1 here cause n_label do not count the 0 label 
         #color[np.where(prediction == i_label), :] = get_color_from_label(i_label, dataset)
-        color[np.where(prediction == i_label), :] = colorLabelManager.labelDict[i_label+1] 
+        color[np.where(prediction == i_label), :] = colorLabelManager.label2Color[i_label+1] 
     prop = [('x', 'f4'), ('y', 'f4'), ('z', 'f4'), ('red', 'u1'), ('green', 'u1'), ('blue', 'u1')]
     vertex_all = np.empty(len(xyz), dtype=prop)
     for i in range(0, 3):

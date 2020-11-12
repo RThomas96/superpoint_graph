@@ -2,12 +2,9 @@ import os
 
 class ColorLabelManager:
         def __init__(self):
-                #self.filePath = os.getcwd() + "/" + os.path.dirname(__file__) + "/colorCode" 
-                #self.filePath = "/home/thomas/Data/Cajun/Evaluation/Methods/superpoint_graph/utils/colorCode" 
                 #TODO
                 self.filePath = "/home/thomas/Data/Cajun/Data/Evaluation/Methods/superpoint_graph/utils/colorCode" 
-                self.colorDict, self.labelDict, self.nameDict, self.aggregationDict = self.parseColorFile()
-                #self.nbColor = len(self.colorDict)
+                self.label2Color, self.label2Name, self.aggregationDict = self.parseColorFile()
                 self.nbColor = len(self.aggregationDict)
                 self.needAggregation = True if max([len(x) for x in self.aggregationDict.values()]) > 1 else False
                 if self.needAggregation:
@@ -15,40 +12,38 @@ class ColorLabelManager:
 
         def parseColorFile(self):
                 colorFile = open(self.filePath, "r") 
-                colorDict, labelDict, nameDict, aggregationDict = {}, {}, {}, {}
-                # First label is "unknown" label and black color
-                # This label is writed by prediction writer, and not in the color file
-                labelDict[0] = [0, 0, 0]
+                label2Color, label2Name, aggregationDict = {}, {}, {}
 
-                # Name dict is used per per_class_iou, and then do not need to contain 0
-                # Note that in report 0 cannot be renamed
-                # BUT, it is used in report manager too so it need the name 0
-                nameDict[0] = 'Inconnue'
+                label2Color[0] = [0, 0, 0]
+                label2Name[0] = 'Inconnue'
                 for i, line in enumerate(colorFile):
                         values = line.split()
-                        key = values[1]+values[2]+values[3]
-                        # No +1 here cause colorDict is used by old upsample script without the octree
-                        # And there is no unknown label for now in labelised files
-                        # To add unknown labels modify here AND AT AGGREGATE LABEL THAT ADD +1
-                        colorDict[key] = values[0]
-                        # +1 here cause first label is "unknown" label 
-                        labelDict[i+1] = [values[1], values[2], values[3]]
-                        nameDict[i+1] = values[7]
+                        label2Color[i+1] = [values[1], values[2], values[3]]
+                        label2Name[i+1] = values[7]
                         aggregationDict.setdefault(values[0],[]).append(i)
-                return colorDict, labelDict, nameDict, aggregationDict
+                return label2Color, label2Name, aggregationDict
 
         def aggregateLabels(self, labels):
-                for i, label in enumerate(labels):
-                        for key, value in self.aggregationDict.items():
-                                if label in value:
-                                        labels[i] = key+1
-                                        break
+            return [self.aggregationDict[i] for i in labels]
 
         def aggregateDict(self):
-                newLabelDict, newNameDict, newAggregationDict = {}, {}, {}
-                newLabelDict[0] = [0, 0, 0]
-                for i, keep in enumerate(sorted(self.aggregationDict)):
-                        newLabelDict[int(i)+1] = self.labelDict[int(keep)+1]
-                        newNameDict[int(i)] = self.nameDict[int(keep)]
-                        newAggregationDict[int(i)] = self.aggregationDict[keep]
-                self.labelDict, self.nameDict, self.aggregationDict = newLabelDict, newNameDict, newAggregationDict
+                newLabel2Color, newLabel2Name = {}, {}
+                newLabel2Color[0] = [0, 0, 0]
+                newLabel2Name[0] = 'Inconnue'
+
+                keys = list(self.aggregationDict.keys())
+                intKeys = [int(x) for x in keys]
+                sortedKeys = sorted(intKeys)
+
+                for i, keep in enumerate(sortedKeys):
+                        newLabel2Color[int(i)+1] = self.label2Color[keep]
+                        newLabel2Name[int(i)+1] = self.label2Name[keep]
+                        #newAggregationDict[int(i)] = self.aggregationDict[str(keep)]
+
+                # Here we invert the aggregation dict to simplify label conversion
+                reverse_dict = {0:0}
+                for key in self.aggregationDict.keys():
+                    for value in self.aggregationDict[key]:
+                        reverse_dict[value+1] = int(key)
+                
+                self.label2Color, self.label2Name, self.aggregationDict = newLabel2Color, newLabel2Name, reverse_dict

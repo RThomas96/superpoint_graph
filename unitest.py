@@ -12,7 +12,7 @@ parser = argparse.ArgumentParser(description='Superpoint computation programm')
 parser.add_argument('--keep', action='store_true', help='Do not delete all files')
 args = parser.parse_args()
 
-rootDir = "projects/test"
+rootDir = "projects/test2"
 
 if not args.keep:
     # Delete all subfolders except "data"
@@ -25,8 +25,9 @@ if not args.keep:
 
     print("")
 
-superpointComputation(["test", "--voxelize", "--voxel_width", "0.1"])
+#superpointComputation(["test2", "--voxelize", "--voxel_width", "0.05"])
+superpointComputation(["test2", "--voxelize", "--voxel_width", "0.1"])
 
-train(["test", "--epoch", "5"])
+train(["test2", "--epoch", "20"])
 
-visualize(["test", "test", "LPA3-1", "--outType", "sptgd"])
+visualize(["test2", "test", "LPA3-1", "--outType", "sptgd"])

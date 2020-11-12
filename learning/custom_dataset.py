@@ -96,5 +96,5 @@ def get_info(args):
         'class_weights': weights,
         'classes': colors.nbColor,
         #'inv_class_map': colors.nameDict[1:]
-        'inv_class_map': {x: colors.nameDict[x] for x in colors.nameDict if x not in [0]} 
+        'inv_class_map': {x: colors.label2Name[x] for x in colors.label2Name if x not in [0]}
     }

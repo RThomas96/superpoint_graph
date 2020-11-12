@@ -146,7 +146,7 @@ def main(args):
     statPath = pathManager.rootPath + "/reports/learningStat.csv"
 
     className = []
-    for name in list(colorLabelManager.nameDict.values())[1:]:
+    for name in list(colorLabelManager.label2Name.values())[1:]:
         className.append(name)
 
     if not os.path.isfile(statPath):

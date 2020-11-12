@@ -248,7 +248,7 @@ def main(args):
     
                 # FIX: color aggregation
                 if colors.needAggregation:
-                    colors.aggregateLabels(labels)
+                    labels = np.array(colors.aggregateLabels(labels))
                 # Not needed anymore cause the label 0 is now the unknown label
                 #else:
                 #    labels = np.array([label+1 for label in labels])
