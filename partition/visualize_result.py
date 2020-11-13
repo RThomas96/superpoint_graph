@@ -16,7 +16,7 @@ import provider
 
 sys.path.append("./supervized_partition/")
 import graph_processing as graph
-from reportManager import StatManagerOnSPP as ReportManager
+from pathManager import PathManager 
 
 def openPredictions(res_file, h5FolderPath, components, xyz):
     try:
@@ -74,27 +74,27 @@ def main(args):
     graph_spg, components, in_component = provider.read_spg(spgFile)
     
     if outStd:
-        provider.geofstd2laz(stdFile, xyz, geof, components, in_component)
+        provider.writeGeofstd(stdFile, xyz, geof, components, in_component)
     
     if outGeof:
-        provider.geof2laz(geofFile, xyz, geof)
+        provider.writeGeof(geofFile, xyz, geof)
     
     if args.supervized and outTransitions:
-        provider.transition2laz(transFile, xyz, edg_source, is_transition)
+        provider.writeTransition(transFile, xyz, edg_source, is_transition)
     
     if outPredictions:
         try:
             pred_full = openPredictions(res_file, args.dataset + "/" + fileName, components, xyz)
-            provider.prediction2laz(predictionFile, xyz, pred_full)
+            provider.writePrediction(predictionFile, xyz, pred_full)
         except ValueError:
             print("Can't visualize predictions")
     
     if outSuperpoints and args.filter_label is not None:
         print("Filter activated")
-        provider.partition2lazfilter(sppFile, xyz, components, graph_spg["sp_labels"], args.filter_label)
+        provider.writePartitionFilter(sppFile, xyz, components, graph_spg["sp_labels"], args.filter_label)
     
     if outSuperpoints and args.filter_label is None:
-        provider.partition2laz(sppFile, xyz, components)
+        provider.writePartition(sppFile, xyz, components)
 
 if __name__ == "__main__":
     main(sys.argv[1:])

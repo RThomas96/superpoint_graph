@@ -67,51 +67,21 @@ def reduceDensity(inFile, outFile, voxel_width, regular_density = True):
     count = pipeline.execute()
 
 #------------------------------------------------------------------------------
-def transition2ply(filename, xyz, edge_source, is_transition):
+def writeTransition(filename, xyz, edge_source, is_transition, dataType = "laz"):
     """write a ply with random colors for each components for only a specific label"""
 
     red=np.array([255, 0, 0])
     blue=np.array([0, 0, 255])
 
-    prop = [('x', 'f4'), ('y', 'f4'), ('z', 'f4'), ('red', 'u1')
-    , ('green', 'u1'), ('blue', 'u1')]
-
     transitions = np.array([is_transition==1]).nonzero()[1]
-
     transitionsIdx = edge_source[transitions] 
 
     color = np.zeros(xyz.shape)
     color[:] = blue
     color[transitionsIdx] = red
-
-    vertex_all = np.empty(len(xyz), dtype=prop)
-    for i in range(0, 3):
-        vertex_all[prop[i][0]] = xyz[:, i]
-    for i in range(0, 3):
-        vertex_all[prop[i+3][0]] = color[:, i] 
-
-    ply = PlyData([PlyElement.describe(vertex_all, 'vertex')], text=True)
-    ply.write(filename)
+    write_file(filename, xyz, color)
 #------------------------------------------------------------------------------
-def transition2laz(filename, xyz, edge_source, is_transition):
-    """write a ply with random colors for each components for only a specific label"""
-
-    red=np.array([255, 0, 0])
-    blue=np.array([0, 0, 255])
-
-    prop = [('x', 'f4'), ('y', 'f4'), ('z', 'f4'), ('red', 'u1')
-    , ('green', 'u1'), ('blue', 'u1')]
-
-    transitions = np.array([is_transition==1]).nonzero()[1]
-
-    transitionsIdx = edge_source[transitions] 
-
-    color = np.zeros(xyz.shape)
-    color[:] = blue
-    color[transitionsIdx] = red
-    write_laz_simple(filename, xyz, color)
-#------------------------------------------------------------------------------
-def partition2plyfilter(filename, xyz, components, labels, filterLabel):
+def writePartitionFilter(filename, xyz, components, labels, filterLabel, dataType="laz"):
     """write a ply with random colors for each components for only a specific label"""
 
     labelOfEachSpp = labels.argmax(1)
@@ -123,81 +93,23 @@ def partition2plyfilter(filename, xyz, components, labels, filterLabel):
     for i_com in range(0, len(components)):
         color[components[i_com], :] = [random_color(), random_color()
         , random_color()]
-    prop = [('x', 'f4'), ('y', 'f4'), ('z', 'f4'), ('red', 'u1')
-    , ('green', 'u1'), ('blue', 'u1')]
 
-    #xyz = xyz[idxOfFilteredSpp]
-    #color = xyz[idxOfFilteredSpp]
-
-    vertex_all = np.empty(len(xyz), dtype=prop)
-    for i in range(0, 3):
-        vertex_all[prop[i][0]] = xyz[:, i]
-    for i in range(0, 3):
-        vertex_all[prop[i+3][0]] = color[:, i]
-    ply = PlyData([PlyElement.describe(vertex_all, 'vertex')], text=True)
-    ply.write(filename)
+    write_file(filename, xyz, color, dataType)
 #------------------------------------------------------------------------------
-def partition2lazfilter(filename, xyz, components, labels, filterLabel):
-    """write a ply with random colors for each components for only a specific label"""
-
-    labelOfEachSpp = labels.argmax(1)
-    idxOfFilteredSpp = np.argwhere(labelOfEachSpp==int(filterLabel)).flatten()
-    components=components[idxOfFilteredSpp]
-
-    random_color = lambda: random.randint(0, 255)
-    color = np.zeros(xyz.shape)
-    for i_com in range(0, len(components)):
-        color[components[i_com], :] = [random_color(), random_color()
-        , random_color()]
-    prop = [('x', 'f4'), ('y', 'f4'), ('z', 'f4'), ('red', 'u1')
-    , ('green', 'u1'), ('blue', 'u1')]
-    write_laz_simple(filename, xyz, color)
-#------------------------------------------------------------------------------
-def partition2ply(filename, xyz, components):
+def writePartition(filename, xyz, components, dataType="laz"):
     """write a ply with random colors for each components"""
     random_color = lambda: random.randint(0, 255)
     color = np.zeros(xyz.shape)
     for i_com in range(0, len(components)):
-        color[components[i_com], :] = [random_color(), random_color()
-        , random_color()]
-    prop = [('x', 'f4'), ('y', 'f4'), ('z', 'f4'), ('red', 'u1')
-    , ('green', 'u1'), ('blue', 'u1')]
-    vertex_all = np.empty(len(xyz), dtype=prop)
-    for i in range(0, 3):
-        vertex_all[prop[i][0]] = xyz[:, i]
-    for i in range(0, 3):
-        vertex_all[prop[i+3][0]] = color[:, i]
-    ply = PlyData([PlyElement.describe(vertex_all, 'vertex')], text=True)
-    ply.write(filename)
+        color[components[i_com], :] = [random_color(), random_color(), random_color()]
+
+    write_file(filename, xyz, color, dataType)
 #------------------------------------------------------------------------------
-def partition2laz(filename, xyz, components):
-    """write a ply with random colors for each components"""
-    random_color = lambda: random.randint(0, 255)
-    color = np.zeros(xyz.shape)
-    for i_com in range(0, len(components)):
-        color[components[i_com], :] = [random_color(), random_color()
-        , random_color()]
-    prop = [('x', 'f4'), ('y', 'f4'), ('z', 'f4'), ('red', 'u1')
-    , ('green', 'u1'), ('blue', 'u1')]
-    write_laz_simple(filename, xyz, color)
-#------------------------------------------------------------------------------
-def geof2ply(filename, xyz, geof):
-    """write a ply with colors corresponding to geometric features"""
+def writeGeof(filename, xyz, geof, dataType="laz"):
     color = np.array(255 * geof[:, [0, 1, 3]], dtype='uint8')
-    prop = [('x', 'f4'), ('y', 'f4'), ('z', 'f4'), ('red', 'u1'), ('green', 'u1'), ('blue', 'u1')]
-    vertex_all = np.empty(len(xyz), dtype=prop)
-    for i in range(0, 3):
-        vertex_all[prop[i][0]] = xyz[:, i]
-    for i in range(0, 3):
-        vertex_all[prop[i+3][0]] = color[:, i]
-    ply = PlyData([PlyElement.describe(vertex_all, 'vertex')], text=True)
-    ply.write(filename)
+    write_file(filename, xyz, color, dataType)
 #------------------------------------------------------------------------------
-def geof2laz(filename, xyz, geof):
-    color = np.array(255 * geof[:, [0, 1, 3]], dtype='uint8')
-    write_laz_simple(filename, xyz, color)
-#------------------------------------------------------------------------------
-def geofstd2laz(filename, xyz, geof, components, in_component):
+def writeGeofstd(filename, xyz, geof, components, in_component, dataType="laz"):
     geofpt = np.copy(components)   
     geofpt = [geof[x] for x in components]
     std1 = [np.std(x[:, 0]) for x in geofpt] 
@@ -208,92 +120,21 @@ def geofstd2laz(filename, xyz, geof, components, in_component):
 
     color = componentsColor[np.array(in_component)]
 
-    write_laz_simple(filename, xyz, color)
+    write_file(filename, xyz, color, dataType)
 #------------------------------------------------------------------------------
-def prediction2laz(filename, xyz, prediction):
+def writePrediction(filename, xyz, prediction, dataType="laz"):
     """write a ply with colors for each class"""
     colorLabelManager = ColorLabelManager()
     n_label = colorLabelManager.nbColor
     if len(prediction.shape) > 1 and prediction.shape[1] > 1:
         prediction = np.argmax(prediction, axis = 1)
     color = np.zeros(xyz.shape)
-    for i_label in range(0, n_label): # +1 here cause n_label do not count the 0 label 
-        #color[np.where(prediction == i_label), :] = get_color_from_label(i_label, dataset)
-
+    for i_label in range(0, n_label):
         # There is a +1 here cause the unknow label 0 isn't pass to the network so the first label become the label 1
         color[np.where(prediction == i_label), :] = colorLabelManager.label2Color[i_label+1]
-    prop = [('x', 'f4'), ('y', 'f4'), ('z', 'f4'), ('red', 'u1'), ('green', 'u1'), ('blue', 'u1')]
-    write_laz_simple(filename, xyz, color)
-#------------------------------------------------------------------------------
-def prediction2ply(filename, xyz, prediction):
-    """write a ply with colors for each class"""
-    colorLabelManager = ColorLabelManager()
-    n_label = colorLabelManager.nbColor
-    if len(prediction.shape) > 1 and prediction.shape[1] > 1:
-        prediction = np.argmax(prediction, axis = 1)
-    color = np.zeros(xyz.shape)
-    for i_label in range(0, n_label): # +1 here cause n_label do not count the 0 label 
-        #color[np.where(prediction == i_label), :] = get_color_from_label(i_label, dataset)
-        color[np.where(prediction == i_label), :] = colorLabelManager.label2Color[i_label+1] 
-    prop = [('x', 'f4'), ('y', 'f4'), ('z', 'f4'), ('red', 'u1'), ('green', 'u1'), ('blue', 'u1')]
-    vertex_all = np.empty(len(xyz), dtype=prop)
-    for i in range(0, 3):
-        vertex_all[prop[i][0]] = xyz[:, i]
-    for i in range(0, 3):
-        vertex_all[prop[i+3][0]] = color[:, i]
-    ply = PlyData([PlyElement.describe(vertex_all, 'vertex')], text=True)
-    ply.write(filename)
-#------------------------------------------------------------------------------
-def error2ply(filename, xyz, rgb, labels, prediction):
-    """write a ply with green hue for correct classifcation and red for error"""
-    if len(prediction.shape) > 1 and prediction.shape[1] > 1:
-        prediction = np.argmax(prediction, axis = 1)
-    if len(labels.shape) > 1 and labels.shape[1] > 1:
-        labels = np.argmax(labels, axis = 1)
-    color_rgb = rgb/255
-    for i_ver in range(0, len(labels)):
-        
-        color_hsv = list(colorsys.rgb_to_hsv(color_rgb[i_ver,0], color_rgb[i_ver,1], color_rgb[i_ver,2]))
-        if (labels[i_ver] == prediction[i_ver]) or (labels[i_ver]==0):
-            color_hsv[0] = 0.333333
-        else:
-            color_hsv[0] = 0
-        color_hsv[1] = min(1, color_hsv[1] + 0.3)
-        color_hsv[2] = min(1, color_hsv[2] + 0.1)
-        color_rgb[i_ver,:] = list(colorsys.hsv_to_rgb(color_hsv[0], color_hsv[1], color_hsv[2]))
-    color_rgb = np.array(color_rgb*255, dtype='u1')
-    prop = [('x', 'f4'), ('y', 'f4'), ('z', 'f4'), ('red', 'u1'), ('green', 'u1'), ('blue', 'u1')]
-    vertex_all = np.empty(len(xyz), dtype=prop)
-    for i in range(0, 3):
-        vertex_all[prop[i][0]] = xyz[:, i]
-    for i in range(0, 3):
-        vertex_all[prop[i+3][0]] = color_rgb[:, i]        
-    ply = PlyData([PlyElement.describe(vertex_all, 'vertex')], text=True)
-    ply.write(filename)
-#------------------------------------------------------------------------------
-def spg2ply(filename, spg_graph):
-    """write a ply displaying the SPG by adding edges between its centroid"""
-    vertex_prop = [('x', 'f4'), ('y', 'f4'), ('z', 'f4')]
-    vertex_val = np.empty((spg_graph['sp_centroids']).shape[0], dtype=vertex_prop)
-    for i in range(0, 3):
-        vertex_val[vertex_prop[i][0]] = spg_graph['sp_centroids'][:, i]
-    edges_prop = [('vertex1', 'int32'), ('vertex2', 'int32')]
-    edges_val = np.empty((spg_graph['source']).shape[0], dtype=edges_prop)
-    edges_val[edges_prop[0][0]] = spg_graph['source'].flatten()
-    edges_val[edges_prop[1][0]] = spg_graph['target'].flatten()
-    ply = PlyData([PlyElement.describe(vertex_val, 'vertex'), PlyElement.describe(edges_val, 'edge')], text=True)
-    ply.write(filename)
-#------------------------------------------------------------------------------
-def scalar2ply(filename, xyz, scalar):
-    """write a ply with an unisgned integer scalar field"""
-    prop = [('x', 'f4'), ('y', 'f4'), ('z', 'f4'), ('scalar', 'f4')]
-    vertex_all = np.empty(len(xyz), dtype=prop)
-    for i in range(0, 3):
-        vertex_all[prop[i][0]] = xyz[:, i]
-    vertex_all[prop[3][0]] = scalar
-    ply = PlyData([PlyElement.describe(vertex_all, 'vertex')], text=True)
-    
-    ply.write(filename)
+
+    write_file(filename, xyz, color, dataType)
+
 #------------------------------------------------------------------------------
 def read_file(filename, extension):
     if extension == "laz":
@@ -327,6 +168,7 @@ def read_ply(filename):
             return xyz, rgb, labels, []
         except ValueError:
             return xyz, rgb, [], []
+
 #------------------------------------------------------------------------------
 def read_laz(filename):
 
@@ -373,87 +215,26 @@ def read_las(filename):
     z = np.reshape(inFile.z, (N_points,1))
     xyz = np.hstack((x,y,z)).astype('f4')
     return xyz
-#------------------------------------------------------------------------------
-def write_ply_obj(filename, xyz, rgb, labels, object_indices):
-    """write into a ply file. include the label and the object number"""
-    prop = [('x', 'f4'), ('y', 'f4'), ('z', 'f4'), ('red', 'u1')
-            , ('green', 'u1'), ('blue', 'u1'), ('label', 'u1')
-            , ('object_index', 'uint32')]
-    vertex_all = np.empty(len(xyz), dtype=prop)
-    for i_prop in range(0, 3):
-        vertex_all[prop[i_prop][0]] = xyz[:, i_prop]
-    for i_prop in range(0, 3):
-        vertex_all[prop[i_prop+3][0]] = rgb[:, i_prop]
-    vertex_all[prop[6][0]] = labels
-    vertex_all[prop[7][0]] = object_indices
-    ply = PlyData([PlyElement.describe(vertex_all, 'vertex')], text=True)
-    ply.write(filename)
-    
-#------------------------------------------------------------------------------
-def embedding2ply(filename, xyz, embeddings):
-    """write a ply with colors corresponding to geometric features"""
-    
-    if embeddings.shape[1]>3:
-        pca = PCA(n_components=3)
-        #pca.fit(np.eye(embeddings.shape[1]))
-        pca.fit(np.vstack((np.zeros((embeddings.shape[1],)),np.eye(embeddings.shape[1]))))
-        embeddings = pca.transform(embeddings)
-        
-    #value = (embeddings-embeddings.mean(axis=0))/(2*embeddings.std())+0.5
-    #value = np.minimum(np.maximum(value,0),1)
-    #value = (embeddings)/(3 * embeddings.std())+0.5
-    value = np.minimum(np.maximum((embeddings+1)/2,0),1)
-    
-    
-    color = np.array(255 * value, dtype='uint8')
-    prop = [('x', 'f4'), ('y', 'f4'), ('z', 'f4'), ('red', 'u1'), ('green', 'u1'), ('blue', 'u1')]
-    vertex_all = np.empty(len(xyz), dtype=prop)
-    for i in range(0, 3):
-        vertex_all[prop[i][0]] = xyz[:, i]
-    for i in range(0, 3):
-        vertex_all[prop[i+3][0]] = color[:, i]
-    ply = PlyData([PlyElement.describe(vertex_all, 'vertex')], text=True)
-    
-    ply.write(filename)
 
 #------------------------------------------------------------------------------
-def edge_class2ply2(filename, edg_class, xyz, edg_source, edg_target):
-    """write a ply with edge weight color coded into the midway point"""
-    
-    n_edg = len(edg_target)
-    
-    midpoint = (xyz[edg_source,]+xyz[edg_target,])/2
-    
-    color = np.zeros((edg_source.shape[0],3), dtype = 'uint8')
-    color[edg_class==0,] = [0,0,0]
-    color[(edg_class==1).nonzero(),] = [255,0,0]
-    color[(edg_class==2).nonzero(),] = [125,255,0]
-    color[(edg_class==3).nonzero(),] = [0,125,255]
-    
-    prop = [('x', 'f4'), ('y', 'f4'), ('z', 'f4'), ('red', 'u1'), ('green', 'u1'), ('blue', 'u1')]
-    vertex_all = np.empty(n_edg, dtype=prop)
-    for i in range(0, 3):
-        vertex_all[prop[i][0]] = np.hstack(midpoint[:, i])
-    for i in range(3, 6):
-        vertex_all[prop[i][0]] = color[:,i-3]
-    
-    ply = PlyData([PlyElement.describe(vertex_all, 'vertex')], text=True)
-    
-    ply.write(filename)
-    
-#------------------------------------------------------------------------------
-def write_file(filename, xyz, rgb, labels, extension):
-    if extension == "laz":
-        write_laz(filename, xyz, rgb, labels)
-    else:
-        write_ply(filename, xyz, rgb, labels)
-
-#------------------------------------------------------------------------------
-def write_ply(file, xyz, rgb, labels):
-    if len(labels) > 0:
-        provider.write_ply_labels(file, xyz, rgb, labels)
-    else :
-        provider.write_ply(file, xyz, rgb)
+#def write_file(filename, xyz, rgb, labels, extension):
+def write_file(*args):
+    filename = args[0]
+    xyz = args[1]
+    rgb = args[2]
+    if len(args) == 4 and isinstance(args[3], str):
+        extension = args[3]
+        if extension == "laz":
+            write_laz_simple(filename, xyz, rgb)
+        else:
+            write_ply_simple(filename, xyz, rgb)
+    elif len(args) == 5 and isinstance(args[4], str):
+        labels = args[3]
+        extension = args[4]
+        if extension == "laz":
+            write_laz_labels(filename, xyz, rgb, labels)
+        else:
+            write_ply_labels(filename, xyz, rgb, labels)
 
 #------------------------------------------------------------------------------
 def write_ply_labels(filename, xyz, rgb, labels):
@@ -471,7 +252,7 @@ def write_ply_labels(filename, xyz, rgb, labels):
     ply.write(filename)
 
 #------------------------------------------------------------------------------
-def write_ply(filename, xyz, rgb):
+def write_ply_simple(filename, xyz, rgb):
     """write into a ply file"""
     prop = [('x', 'f4'), ('y', 'f4'), ('z', 'f4'), ('red', 'u1'), ('green', 'u1'), ('blue', 'u1')]
     vertex_all = np.empty(len(xyz), dtype=prop)
@@ -481,13 +262,6 @@ def write_ply(filename, xyz, rgb):
         vertex_all[prop[i_prop+3][0]] = rgb[:, i_prop]
     ply = PlyData([PlyElement.describe(vertex_all, 'vertex')], text=True)
     ply.write(filename)
-
-#------------------------------------------------------------------------------
-def write_laz(file, xyz, rgb, labels):
-    if np.sum(labels) > 0:
-        write_laz_labels(file, xyz, rgb, labels)
-    else :
-        write_laz_simple(file, xyz, rgb)
 
 #------------------------------------------------------------------------------
 def write_laz_labels(filename, xyz, rgb, labels):
@@ -682,6 +456,128 @@ def read_spg(file_name):
     for i_com in range(0, n_com):
         components[i_com] = np.array(grp[str(i_com)], dtype='uint32').tolist()
     return graph, components, in_component
+
+
+# Not working yet ############################################################
+#------------------------------------------------------------------------------
+def error2ply(filename, xyz, rgb, labels, prediction):
+    """write a ply with green hue for correct classifcation and red for error"""
+    if len(prediction.shape) > 1 and prediction.shape[1] > 1:
+        prediction = np.argmax(prediction, axis = 1)
+    if len(labels.shape) > 1 and labels.shape[1] > 1:
+        labels = np.argmax(labels, axis = 1)
+    color_rgb = rgb/255
+    for i_ver in range(0, len(labels)):
+        
+        color_hsv = list(colorsys.rgb_to_hsv(color_rgb[i_ver,0], color_rgb[i_ver,1], color_rgb[i_ver,2]))
+        if (labels[i_ver] == prediction[i_ver]) or (labels[i_ver]==0):
+            color_hsv[0] = 0.333333
+        else:
+            color_hsv[0] = 0
+        color_hsv[1] = min(1, color_hsv[1] + 0.3)
+        color_hsv[2] = min(1, color_hsv[2] + 0.1)
+        color_rgb[i_ver,:] = list(colorsys.hsv_to_rgb(color_hsv[0], color_hsv[1], color_hsv[2]))
+    color_rgb = np.array(color_rgb*255, dtype='u1')
+    prop = [('x', 'f4'), ('y', 'f4'), ('z', 'f4'), ('red', 'u1'), ('green', 'u1'), ('blue', 'u1')]
+    vertex_all = np.empty(len(xyz), dtype=prop)
+    for i in range(0, 3):
+        vertex_all[prop[i][0]] = xyz[:, i]
+    for i in range(0, 3):
+        vertex_all[prop[i+3][0]] = color_rgb[:, i]        
+    ply = PlyData([PlyElement.describe(vertex_all, 'vertex')], text=True)
+    ply.write(filename)
+#------------------------------------------------------------------------------
+def spg2ply(filename, spg_graph):
+    """write a ply displaying the SPG by adding edges between its centroid"""
+    vertex_prop = [('x', 'f4'), ('y', 'f4'), ('z', 'f4')]
+    vertex_val = np.empty((spg_graph['sp_centroids']).shape[0], dtype=vertex_prop)
+    for i in range(0, 3):
+        vertex_val[vertex_prop[i][0]] = spg_graph['sp_centroids'][:, i]
+    edges_prop = [('vertex1', 'int32'), ('vertex2', 'int32')]
+    edges_val = np.empty((spg_graph['source']).shape[0], dtype=edges_prop)
+    edges_val[edges_prop[0][0]] = spg_graph['source'].flatten()
+    edges_val[edges_prop[1][0]] = spg_graph['target'].flatten()
+    ply = PlyData([PlyElement.describe(vertex_val, 'vertex'), PlyElement.describe(edges_val, 'edge')], text=True)
+    ply.write(filename)
+#------------------------------------------------------------------------------
+def scalar2ply(filename, xyz, scalar):
+    """write a ply with an unisgned integer scalar field"""
+    prop = [('x', 'f4'), ('y', 'f4'), ('z', 'f4'), ('scalar', 'f4')]
+    vertex_all = np.empty(len(xyz), dtype=prop)
+    for i in range(0, 3):
+        vertex_all[prop[i][0]] = xyz[:, i]
+    vertex_all[prop[3][0]] = scalar
+    ply = PlyData([PlyElement.describe(vertex_all, 'vertex')], text=True)
+    
+    ply.write(filename)
+#------------------------------------------------------------------------------
+def write_ply_obj(filename, xyz, rgb, labels, object_indices):
+    """write into a ply file. include the label and the object number"""
+    prop = [('x', 'f4'), ('y', 'f4'), ('z', 'f4'), ('red', 'u1')
+            , ('green', 'u1'), ('blue', 'u1'), ('label', 'u1')
+            , ('object_index', 'uint32')]
+    vertex_all = np.empty(len(xyz), dtype=prop)
+    for i_prop in range(0, 3):
+        vertex_all[prop[i_prop][0]] = xyz[:, i_prop]
+    for i_prop in range(0, 3):
+        vertex_all[prop[i_prop+3][0]] = rgb[:, i_prop]
+    vertex_all[prop[6][0]] = labels
+    vertex_all[prop[7][0]] = object_indices
+    ply = PlyData([PlyElement.describe(vertex_all, 'vertex')], text=True)
+    ply.write(filename)
+    
+#------------------------------------------------------------------------------
+def embedding2ply(filename, xyz, embeddings):
+    """write a ply with colors corresponding to geometric features"""
+    
+    if embeddings.shape[1]>3:
+        pca = PCA(n_components=3)
+        #pca.fit(np.eye(embeddings.shape[1]))
+        pca.fit(np.vstack((np.zeros((embeddings.shape[1],)),np.eye(embeddings.shape[1]))))
+        embeddings = pca.transform(embeddings)
+        
+    #value = (embeddings-embeddings.mean(axis=0))/(2*embeddings.std())+0.5
+    #value = np.minimum(np.maximum(value,0),1)
+    #value = (embeddings)/(3 * embeddings.std())+0.5
+    value = np.minimum(np.maximum((embeddings+1)/2,0),1)
+    
+    
+    color = np.array(255 * value, dtype='uint8')
+    prop = [('x', 'f4'), ('y', 'f4'), ('z', 'f4'), ('red', 'u1'), ('green', 'u1'), ('blue', 'u1')]
+    vertex_all = np.empty(len(xyz), dtype=prop)
+    for i in range(0, 3):
+        vertex_all[prop[i][0]] = xyz[:, i]
+    for i in range(0, 3):
+        vertex_all[prop[i+3][0]] = color[:, i]
+    ply = PlyData([PlyElement.describe(vertex_all, 'vertex')], text=True)
+    
+    ply.write(filename)
+
+#------------------------------------------------------------------------------
+def edge_class2ply2(filename, edg_class, xyz, edg_source, edg_target):
+    """write a ply with edge weight color coded into the midway point"""
+    
+    n_edg = len(edg_target)
+    
+    midpoint = (xyz[edg_source,]+xyz[edg_target,])/2
+    
+    color = np.zeros((edg_source.shape[0],3), dtype = 'uint8')
+    color[edg_class==0,] = [0,0,0]
+    color[(edg_class==1).nonzero(),] = [255,0,0]
+    color[(edg_class==2).nonzero(),] = [125,255,0]
+    color[(edg_class==3).nonzero(),] = [0,125,255]
+    
+    prop = [('x', 'f4'), ('y', 'f4'), ('z', 'f4'), ('red', 'u1'), ('green', 'u1'), ('blue', 'u1')]
+    vertex_all = np.empty(n_edg, dtype=prop)
+    for i in range(0, 3):
+        vertex_all[prop[i][0]] = np.hstack(midpoint[:, i])
+    for i in range(3, 6):
+        vertex_all[prop[i][0]] = color[:,i-3]
+    
+    ply = PlyData([PlyElement.describe(vertex_all, 'vertex')], text=True)
+    
+    ply.write(filename)
+    
 #------------------------------------------------------------------------------
 def reduced_labels2full(labels_red, components, n_ver):
     """distribute the labels of superpoints to their repsective points"""
