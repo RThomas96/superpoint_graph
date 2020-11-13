@@ -29,7 +29,7 @@ sys.path.append("./utils")
 
 from colorLabelManager import ColorLabelManager
 from pathManager import PathManager
-from reportManager import ReportManager
+from reportManager import StatManagerOnSPP as ReportManager
 
 from partition.ply_c import libply_c
 import libcp

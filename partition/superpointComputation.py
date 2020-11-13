@@ -27,7 +27,7 @@ from sklearn.linear_model import RANSACRegressor
 
 from colorLabelManager import ColorLabelManager
 from pathManager import PathManager
-from reportManager import ReportManager
+from reportManager import SPPComputationReportManager as ReportManager
 
 import libcp
 import graphs
@@ -246,12 +246,8 @@ def main(args):
                     n_labels = 0
                     labels = np.array([])
     
-                # FIX: color aggregation
                 if colors.needAggregation:
                     labels = np.array(colors.aggregateLabels(labels))
-                # Not needed anymore cause the label 0 is now the unknown label
-                #else:
-                #    labels = np.array([label+1 for label in labels])
                 
                 timer.stop(1)
                 # Step 1.2: Compute nn graph
@@ -324,7 +320,7 @@ def main(args):
 
             isTrainDataset = (dataset == "train")
             reportManager.train = isTrainDataset 
-            reportManager.computeStatsOnSpp(components, graph_sp["sp_labels"])
+            reportManager.computeStatOnSpp(graph_sp["sp_labels"])
     
         isTrainDataset = (dataset == "train")
         reportManager.train = isTrainDataset 

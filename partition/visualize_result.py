@@ -16,7 +16,7 @@ import provider
 
 sys.path.append("./supervized_partition/")
 import graph_processing as graph
-from pathManager import PathManager
+from reportManager import StatManagerOnSPP as ReportManager
 
 def openPredictions(res_file, h5FolderPath, components, xyz):
     try:

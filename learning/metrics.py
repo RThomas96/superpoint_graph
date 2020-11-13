@@ -10,6 +10,7 @@ class ConfusionMatrix:
   def __init__(self, number_of_labels = 2):
     self.number_of_labels = number_of_labels
     self.confusion_matrix = np.zeros(shape=(self.number_of_labels,self.number_of_labels))
+
   def count_predicted(self, ground_truth, predicted, number_of_added_elements=1):
     self.confusion_matrix[ground_truth][predicted] += number_of_added_elements
 
