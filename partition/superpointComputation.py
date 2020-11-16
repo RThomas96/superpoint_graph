@@ -184,7 +184,7 @@ def main(args):
     pathManager = PathManager(args.ROOT_PATH)
     pathManager.createDirForSppComputation()
     
-    reportManager = ReportManager(pathManager.sppCompReportPath, args, n_labels+1)
+    reportManager = ReportManager(args, n_labels+1)
     
     # Init timestamp
     if args.save:
@@ -322,9 +322,8 @@ def main(args):
             reportManager.train = isTrainDataset 
             reportManager.computeStatOnSpp(graph_sp["sp_labels"])
     
-        isTrainDataset = (dataset == "train")
-        reportManager.train = isTrainDataset 
-        pathManager.saveCsvReport(reportManager.getCsvReport(isTrainDataset), isTrainDataset)
+        csvReport = reportManager.getCsvReport(dataset)
+        pathManager.writeCsv(pathManager.getSppCompCsvReport(dataset), csvReport[0], csvReport[1])
 
     pathManager.saveGeneralReport(reportManager.getFormattedReport())
 

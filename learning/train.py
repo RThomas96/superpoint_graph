@@ -42,6 +42,7 @@ sys.path.append("./utils")
 
 from colorLabelManager import ColorLabelManager
 from pathManager import PathManager
+from reportManager import ConfusionMatrix
 
 def main(args):
     parser = argparse.ArgumentParser(description='Large-scale Point Cloud Semantic Segmentation with Superpoint Graphs')
@@ -135,24 +136,16 @@ def main(args):
     args.sp_decoder_config = ast.literal_eval(args.sp_decoder_config)
     args.ptn_widths_stn = ast.literal_eval(args.ptn_widths_stn)
 
+    # TO MOVE
+
     pathManager = PathManager(args.ROOT_PATH)
     outDir = pathManager.rootPath + "/results"
     modelDir = pathManager.rootPath + "/pretrained"
-
+    
+    predictionFile = os.path.join(outDir, 'predictions.h5')
     args.odir = modelDir
 
-    colorLabelManager = ColorLabelManager()
-    
-    statPath = pathManager.rootPath + "/reports/learningStat.csv"
-
-    className = []
-    for name in list(colorLabelManager.label2Name.values())[1:]:
-        className.append(name)
-
-    if not os.path.isfile(statPath):
-        with open(statPath, 'w', newline='') as csvfile:
-            spamwriter = csv.writer(csvfile, delimiter=';', quotechar='|', quoting=csv.QUOTE_MINIMAL)
-            spamwriter.writerow(["epoch", "acc", "loss", "oacc", "avg_iou", "acc_test", "oacc_test", "avg_iou_test", "avg_acc_test", "best_iou"] + className)
+    #colorLabelManager = ColorLabelManager()
 
     if not os.path.isdir(outDir): os.mkdir(outDir)
     if not os.path.isdir(modelDir): os.mkdir(modelDir)
@@ -253,6 +246,7 @@ def main(args):
             logging.debug('Batch loss %f, Loader time %f ms, Trainer time %f ms.', loss.data.item(), t_loader, t_trainer)
             t0 = time.time()
 
+        #acc, loss, oacc, avg_iou
         return acc_meter.value()[0], loss_meter.value()[0], confusion_matrix.get_overall_accuracy(), confusion_matrix.get_average_intersection_union()
 
     ############
@@ -270,6 +264,7 @@ def main(args):
         acc_meter = tnt.meter.ClassErrorMeter(accuracy=True)
         loss_meter = tnt.meter.AverageValueMeter()
         confusion_matrix = metrics.ConfusionMatrix(dbinfo['classes'])
+        CM = ConfusionMatrix(dbinfo['classes'])
 
         # DOOOOC
         # tvec_cpu = groundtruth = [0:2000] with in each case [0:9] number of point for each label
@@ -293,8 +288,10 @@ def main(args):
             if t_cpu.size > 0:
                 acc_meter.add(o_cpu, t_cpu)
                 confusion_matrix.count_predicted_batch(tvec_cpu, np.argmax(o_cpu,1))
+                for i, label in enumerate(np.argmax(o_cpu, axis=1)):
+                    CM.addBatchPredictionVec(label, tvec_cpu[i, :])
 
-        return meter_value(acc_meter), loss_meter.value()[0], confusion_matrix.get_overall_accuracy(), confusion_matrix.get_average_intersection_union(), confusion_matrix.get_mean_class_accuracy(), confusion_matrix.get_confusion_matrix()
+        return meter_value(acc_meter), loss_meter.value()[0], confusion_matrix.get_overall_accuracy(), confusion_matrix.get_average_intersection_union(), confusion_matrix.get_mean_class_accuracy(), CM #confusion_matrix.get_confusion_matrix()
 
     ############
     def eval_final():
@@ -367,86 +364,54 @@ def main(args):
         " Update tensor if grad is computed "
         scheduler.step() 
 
+        # 1. Train
         acc, loss, oacc, avg_iou = train()
         print(TRAIN_COLOR + '-> Train Loss: %1.4f' % (loss))
 
+        # 2. Save the model
+        if epoch % args.save_nth_epoch == 0 or epoch==args.epochs-1:
+            torch.save({'epoch': epoch + 1, 'args': args, 'state_dict': model.state_dict(), 'optimizer' : optimizer.state_dict(), 'scaler': scaler}, os.path.join(args.odir, 'model.pth.tar'))
+        
+
+        if math.isnan(loss): break
+
+        # 3. Test on validation dataset
         if (epoch % args.test_train_nth_epoch == 0):
-            acc_val, loss_val, oacc_val, avg_iou_val, B, C = eval(True)
-            print(TRAIN_COLOR + '-> Train Loss: %1.4f | Valid Loss: %1.4f | Train accuracy: %3.2f%%' % (loss, loss_val, acc_val))
+            acc_val, loss_val, oacc_val, avg_iou_val, avg_acc_val, CM_val = eval(True)
+            print(TRAIN_COLOR + '-> Validation Loss: %1.4f | Validation accuracy: %3.2f%%' % (loss_val, acc_val))
 
         new_best_model = False
-        #if args.use_val_set:
-        #    acc_val, loss_val, oacc_val, avg_iou_val, avg_acc_val = eval(True)
-        #    print(VAL_COLOR + '-> Val Loss: %1.4f  Val accuracy: %3.2f%%  Val oAcc: %3.2f%%  Val IoU: %3.2f%%  best ioU: %3.2f%%' % \
-        #         (loss_val, acc_val, 100*oacc_val, 100*avg_iou_val,100*max(best_iou,avg_iou_val)) + TRAIN_COLOR)
-        #    if avg_iou_val>best_iou: #best score yet on the validation set
-        #        print(BEST_COLOR + '-> New best model achieved!' + TRAIN_COLOR)
-        #        best_iou = avg_iou_val
-        #        new_best_model = True
-        #        torch.save({'epoch': epoch + 1, 'args': args, 'state_dict': model.state_dict(), 'optimizer' : optimizer.state_dict(), 'scaler': scaler},
-        #               os.path.join(modelDir, 'model.pth.tar'))
-        #elif epoch % args.save_nth_epoch == 0 or epoch==args.epochs-1:
-        #        torch.save({'epoch': epoch + 1, 'args': args, 'state_dict': model.state_dict(), 'optimizer' : optimizer.state_dict(), 'scaler': scaler},
-        #               os.path.join(modelDir, 'model.pth.tar'))
-        #test every test_nth_epochs
-        #or test after each enw model (but skip the first 5 for efficiency)
 
-        # TO DECOMMENT
-        if (not(args.use_val_set) and (epoch+1) % args.test_nth_epoch == 0)  \
-           or (args.use_val_set and new_best_model and epoch > 5): 
-            " Eval on test set, disabled here cause we haven't test set yet "
-            # CM = confusion matrix
+        # 4. Test on test dataset
+        if (not(args.use_val_set) and (epoch+1) % args.test_nth_epoch == 0) or (args.use_val_set and new_best_model and epoch > 5): 
             acc_test, loss_test, oacc_test, avg_iou_test, avg_acc_test, CM = eval(False)
             print(TEST_COLOR + '-> Test Loss: %1.4f  Test accuracy: %3.2f%%  Test oAcc: %3.2f%%  Test avgIoU: %3.2f%%' % \
                  (loss_test, acc_test, 100*oacc_test, 100*avg_iou_test) + TRAIN_COLOR)
-        else:
-            acc_test, loss_test, oacc_test, avg_iou_test, avg_acc_test = 0, 0, 0, 0, 0
 
-        stats.append({'epoch': epoch, 'acc': acc, 'loss': loss, 'oacc': oacc, 'avg_iou': avg_iou, 'acc_test': acc_test, 'oacc_test': oacc_test, 'avg_iou_test': avg_iou_test, 'avg_acc_test': avg_acc_test, 'best_iou' : best_iou})
+        # 5. Write the csv stat file
+        # WARNING: All stats are on POINTS and not on SPP
+        header = ["epoch", "acc", "loss", "oacc", "avg_iou", "acc_test", "oacc_test", "avg_iou_test", "avg_acc_test", "best_iou"] + list(ColorLabelManager().label2Name.values())[1:] 
 
-        if epoch % args.save_nth_epoch == 0 or epoch==args.epochs-1:
-            with open(os.path.join(args.odir, 'trainlog.json'), 'w') as outfile:
-                json.dump(stats, outfile,indent=4)
-            torch.save({'epoch': epoch + 1, 'args': args, 'state_dict': model.state_dict(), 'optimizer' : optimizer.state_dict(), 'scaler': scaler},
-                       os.path.join(args.odir, 'model.pth.tar'))
-        
-        if math.isnan(loss): break
-    
-        #Json file format
-        if len(stats)>0:
-            with open(os.path.join(outDir, 'trainlog.json'), 'w') as outfile:
-                json.dump(stats, outfile, indent=4)
+        acc_per_class = CM.getAccuracyPerClass(withoutNan=True)
+        data = np.concatenate([[epoch, acc_val, loss, oacc, avg_iou, acc_test, oacc_test, avg_iou_test, avg_acc_test, best_iou], acc_per_class])
 
-        # Csv file format
-        # Get accuracy for each class
-        acc_per_class = np.zeros(len(CM[0])) 
-        for i in range(np.shape(CM)[0]):
-            acc_per_class[i] = (CM[i, i].sum() / CM[i].sum())*100.
-        if len(stats)>0:
-            with open(statPath, 'a', newline='') as csvfile:
-                spamwriter = csv.writer(csvfile, delimiter=';', quotechar='|', quoting=csv.QUOTE_MINIMAL)
-                try:
-                    spamwriter.writerow(np.concatenate([[epoch, acc_val, loss, oacc, avg_iou, acc_test, oacc_test, avg_iou_test, avg_acc_test, best_iou], acc_per_class]))
-                except UnboundLocalError:
-                    acc_val, loss_val, oacc_val, avg_iou_val, B, C = eval(True)
-                    spamwriter.writerow(np.concatenate([[epoch, acc_val, loss, oacc, avg_iou, acc_test, oacc_test, avg_iou_test, avg_acc_test, best_iou], acc_per_class]))
+        pathManager.writeCsv(pathManager.getTrainingCsvReport(), header, data)
 
+    # 5 Bonus. If needed resume last best model
     if args.use_val_set :
         args.resume = args.odir + '/model.pth.tar'
         model, optimizer, stats = resume(args, dbinfo)
         torch.save({'epoch': epoch + 1, 'args': args, 'state_dict': model.state_dict(), 'optimizer' : optimizer.state_dict()},
                        os.path.join(args.odir, 'model.pth.tar'))
     
-    # Final evaluation
+    # 6. Final evaluation
     if args.test_multisamp_n>0 and 'test' in args.db_test_name:
         acc_test, oacc_test, avg_iou_test, per_class_iou_test, predictions_test, avg_acc_test, confusion_matrix = eval_final()
-        print('-> Multisample {}: Test accuracy: {}, \tTest oAcc: {}, \tTest avgIoU: {}, \tTest mAcc: {}'.format(args.test_multisamp_n, acc_test, oacc_test, avg_iou_test, avg_acc_test))
-        with h5py.File(os.path.join(outDir, 'predictions.h5'), 'w') as hf:
+        with h5py.File(predictionFile, 'w') as hf:
             for fname, o_cpu in predictions_test.items():
                 hf.create_dataset(name=fname, data=o_cpu) #(0-based classes)
-        with open(os.path.join(outDir, 'scores_'+args.db_test_name+'.json'), 'w') as outfile:
-            json.dump([{'epoch': args.start_epoch, 'acc_test': acc_test, 'oacc_test': oacc_test, 'avg_iou_test': avg_iou_test, 'per_class_iou_test': per_class_iou_test, 'avg_acc_test': avg_acc_test}], outfile)
-        np.save(os.path.join(outDir, 'pointwise_cm.npy'), confusion_matrix)
+
+        print('-> Multisample {}: Test accuracy: {}, \tTest oAcc: {}, \tTest avgIoU: {}, \tTest mAcc: {}'.format(args.test_multisamp_n, acc_test, oacc_test, avg_iou_test, avg_acc_test))
 
 def resume(args, dbinfo):
     """ Loads model and optimizer state from a previous checkpoint. """
@@ -517,3 +482,22 @@ def meter_value(meter):
 
 if __name__ == "__main__": 
     main(sys.argv[1:])
+
+# LOOG
+        #if args.use_val_set:
+        #    acc_val, loss_val, oacc_val, avg_iou_val, avg_acc_val = eval(True)
+        #    print(VAL_COLOR + '-> Val Loss: %1.4f  Val accuracy: %3.2f%%  Val oAcc: %3.2f%%  Val IoU: %3.2f%%  best ioU: %3.2f%%' % \
+        #         (loss_val, acc_val, 100*oacc_val, 100*avg_iou_val,100*max(best_iou,avg_iou_val)) + TRAIN_COLOR)
+        #    if avg_iou_val>best_iou: #best score yet on the validation set
+        #        print(BEST_COLOR + '-> New best model achieved!' + TRAIN_COLOR)
+        #        best_iou = avg_iou_val
+        #        new_best_model = True
+        #        torch.save({'epoch': epoch + 1, 'args': args, 'state_dict': model.state_dict(), 'optimizer' : optimizer.state_dict(), 'scaler': scaler},
+        #               os.path.join(modelDir, 'model.pth.tar'))
+        #elif epoch % args.save_nth_epoch == 0 or epoch==args.epochs-1:
+        #        torch.save({'epoch': epoch + 1, 'args': args, 'state_dict': model.state_dict(), 'optimizer' : optimizer.state_dict(), 'scaler': scaler},
+        #               os.path.join(modelDir, 'model.pth.tar'))
+        #test every test_nth_epochs
+        #or test after each enw model (but skip the first 5 for efficiency)
+
+        # TO DECOMMENT

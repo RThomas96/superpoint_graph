@@ -20,11 +20,13 @@ class PathManager :
         self.trainingReportPath = self.reportPath + "/training"
 
         self.localReportPath = self.sppCompReportPath + "/" + datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
-        self.generalReport= self.localReportPath + "/generalReport.report"
+        self.generalReport = self.localReportPath + "/generalReport.report"
         self.timeReport= self.localReportPath + "/sppComputationBenchmark.report"
 
         self.sppCompTrainingCsv = self.sppCompReportPath + "/statsTraining.csv"
         self.sppCompTestingCsv = self.sppCompReportPath + "/statsTesting.csv"
+
+        self.trainingCsv = self.trainingReportPath + "/statsTraining.csv"
 
         # Result hierarchy
         self.predictionFile = self.rootPath + "/results/predictions.h5"
@@ -108,15 +110,20 @@ class PathManager :
         file.write(formattedReport)
         file.close()
 
-    def saveCsvReport(self, report, isTraining):
-        if isTraining:
-            file = self.sppCompTrainingCsv
-        else:
-            file = self.sppCompTestingCsv
-
+    def writeCsv(self, file, header, data):
         isFile = os.path.isfile(file)
         with open(file, 'a', newline='') as csvfile:
             spamwriter = csv.writer(csvfile, delimiter=';', quotechar='|', quoting=csv.QUOTE_MINIMAL)
             if not isFile:
-                spamwriter.writerow(report[0])# report[0] is header
-            spamwriter.writerow(report[1])# report[1] is data
+                spamwriter.writerow(header)
+            spamwriter.writerow(data)
+
+    def getTrainingCsvReport(self):
+        return self.trainingCsv
+
+    def getSppCompCsvReport(self, dataset):
+        if dataset == "test":
+            return self.sppCompTestingCsv
+        else:
+            return self.sppCompTrainingCsv
+

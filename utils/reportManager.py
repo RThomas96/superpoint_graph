@@ -21,6 +21,10 @@ class ConfusionMatrix:
     def addBatchPrediction(self, prediction, nbPrediction, groundTruth):
         self.confusionMatrix[groundTruth, prediction] += nbPrediction
 
+    # Add a prediction when the ground truth is a vector
+    def addBatchPredictionVec(self, prediction, groundTruth):
+        self.confusionMatrix.getA()[:, prediction] += groundTruth
+
     def getTruePositivPerClass(self):
         return np.diagonal(self.confusionMatrix)
 
@@ -38,8 +42,11 @@ class ConfusionMatrix:
     def getTotalAccuracy(self): 
         return (self.getTruePositivPerClass().sum() / self.getNbValues()) * 100
 
-    def getAccuracyPerClass(self): 
-        return (self.getTruePositivPerClass() / (self.getTruePositivPerClass() + self.getFalsePositivPerClass())) * 100 
+    def getAccuracyPerClass(self, withoutNan = False): 
+        all = np.array(self.confusionMatrix.sum(axis=0)).flatten()
+        if withoutNan: 
+            all[all == 0] += 1
+        return (self.getTruePositivPerClass() / all) * 100 
 
     def getNbValues(self):
         return self.confusionMatrix.sum()
@@ -76,7 +83,7 @@ class StatManagerOnSPP:
         return self.CM.getAccuracyPerClass()
 
 class SPPComputationReportManager:
-    def __init__(self, rootPath, args, nbLabels):
+    def __init__(self, args, nbLabels):
         " Indicate if next values added to the class will be from from training data "
         self.train = True
 
@@ -102,8 +109,8 @@ class SPPComputationReportManager:
                 renamedDict[label2Name[i]] = val
         return renamedDict
 
-    def getCsvReport(self, getTraining):
-        if getTraining:
+    def getCsvReport(self, dataset):
+        if dataset == "train":
             self.train = True
         else:
             self.train = False
