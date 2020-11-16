@@ -77,7 +77,7 @@ def main(args):
     parser.add_argument('--db_test_name', default='test')
     parser.add_argument('--use_val_set', type=int, default=0)
     parser.add_argument('--use_pyg', default=0, type=int, help='Wether to use Pytorch Geometric for graph convolutions')
-    parser.add_argument('--resume', default='', help='Loads a previously saved model.')
+    #parser.add_argument('--resume', default='', help='Loads a previously saved model.')
 
     # Model
     # Define recurrent network module nature GRU/LSTM, the number of iterations and the number of features
@@ -128,6 +128,8 @@ def main(args):
     parser.add_argument('--sp_decoder_config', default="[]", type=str,
                         help='Size of the decoder : sp_embedding -> sp_class. First layer of size sp_embed (* (1+n_ecc_iteration) if concatenation) and last layer is n_classes')
 
+    parser.add_argument('--resume', action='store_true', help='Resume the model')
+
     args = parser.parse_args(args)
     args.start_epoch = 0
     args.lr_steps = ast.literal_eval(args.lr_steps)
@@ -136,35 +138,19 @@ def main(args):
     args.sp_decoder_config = ast.literal_eval(args.sp_decoder_config)
     args.ptn_widths_stn = ast.literal_eval(args.ptn_widths_stn)
 
-    # TO MOVE
-
     pathManager = PathManager(args.ROOT_PATH)
-    outDir = pathManager.rootPath + "/results"
-    modelDir = pathManager.rootPath + "/pretrained"
     
-    predictionFile = os.path.join(outDir, 'predictions.h5')
-    args.odir = modelDir
-
-    #colorLabelManager = ColorLabelManager()
-
-    if not os.path.isdir(outDir): os.mkdir(outDir)
-    if not os.path.isdir(modelDir): os.mkdir(modelDir)
-     
     " Dirty fix in order to keep arguments coherent in the rest of the code "
     " Need refactor but args is propagate all hover the code "
     args.CUSTOM_SET_PATH = pathManager.rootPath
     args.supervized = 0
 
-    print('Will save model to ' + modelDir)
-
     set_seed(args.seed, args.cuda)
     logging.getLogger().setLevel(logging.INFO)  #set to logging.DEBUG to allow for more prints
-    #if (args.dataset=='sema3d' and args.db_test_name.startswith('test')) or (args.dataset.startswith('s3dis_02') and args.cvfold==2):
-        # needed in pytorch 0.2 for super-large graphs with batchnorm in fnet  (https://github.com/pytorch/pytorch/pull/2919)
-    torch.backends.cudnn.enabled = False
 
-    if args.use_pyg:
-        torch.backends.cudnn.enabled = False
+    torch.backends.cudnn.enabled = False
+    #if args.use_pyg:
+    #    torch.backends.cudnn.enabled = False
 
     import custom_dataset
     dbinfo = custom_dataset.get_info(args)
@@ -172,8 +158,7 @@ def main(args):
     create_dataset = custom_dataset.get_datasets
 
     # Create model and optimizer
-    if args.resume != '':
-        if args.resume=='RESUME': args.resume = modelDir + '/model.pth.tar'
+    if args.resume :
         model, optimizer, stats = resume(args, dbinfo)
     else:
         print("Setup CUDA model")
@@ -370,7 +355,7 @@ def main(args):
 
         # 2. Save the model
         if epoch % args.save_nth_epoch == 0 or epoch==args.epochs-1:
-            torch.save({'epoch': epoch + 1, 'args': args, 'state_dict': model.state_dict(), 'optimizer' : optimizer.state_dict(), 'scaler': scaler}, os.path.join(args.odir, 'model.pth.tar'))
+            torch.save({'epoch': epoch + 1, 'args': args, 'state_dict': model.state_dict(), 'optimizer' : optimizer.state_dict(), 'scaler': scaler}, pathManager.modelFile)
         
 
         if math.isnan(loss): break
@@ -399,15 +384,14 @@ def main(args):
 
     # 5 Bonus. If needed resume last best model
     if args.use_val_set :
-        args.resume = args.odir + '/model.pth.tar'
+        args.resume = pathManager.modelFile 
         model, optimizer, stats = resume(args, dbinfo)
-        torch.save({'epoch': epoch + 1, 'args': args, 'state_dict': model.state_dict(), 'optimizer' : optimizer.state_dict()},
-                       os.path.join(args.odir, 'model.pth.tar'))
+        torch.save({'epoch': epoch + 1, 'args': args, 'state_dict': model.state_dict(), 'optimizer' : optimizer.state_dict()}, pathManager.modelFile)
     
     # 6. Final evaluation
     if args.test_multisamp_n>0 and 'test' in args.db_test_name:
         acc_test, oacc_test, avg_iou_test, per_class_iou_test, predictions_test, avg_acc_test, confusion_matrix = eval_final()
-        with h5py.File(predictionFile, 'w') as hf:
+        with h5py.File(pathManager.predictionFile, 'w') as hf:
             for fname, o_cpu in predictions_test.items():
                 hf.create_dataset(name=fname, data=o_cpu) #(0-based classes)
 
@@ -416,7 +400,7 @@ def main(args):
 def resume(args, dbinfo):
     """ Loads model and optimizer state from a previous checkpoint. """
     print("=> loading checkpoint '{}'".format(args.resume))
-    checkpoint = torch.load(args.resume)
+    checkpoint = torch.load(pathManager.modelFile)
     
     checkpoint['args'].model_config = args.model_config #to ensure compatibility with previous arguments convention
     #this should be removed once new models are uploaded
@@ -431,10 +415,10 @@ def resume(args, dbinfo):
     if 'optimizer' in checkpoint: optimizer.load_state_dict(checkpoint['optimizer'])
     for group in optimizer.param_groups: group['initial_lr'] = args.lr
     args.start_epoch = checkpoint['epoch']
-    try:
-        stats = json.loads(open(os.path.join(os.path.dirname(args.resume), 'trainlog.json')).read())
-    except:
-        stats = []
+    #try:
+    #    stats = json.loads(open(os.path.join(os.path.dirname(args.resume), 'trainlog.json')).read())
+    #except:
+    #    stats = []
     return model, optimizer, stats
     
 def create_model(args, dbinfo):

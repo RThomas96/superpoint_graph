@@ -30,6 +30,7 @@ class PathManager :
 
         # Result hierarchy
         self.predictionFile = self.rootPath + "/results/predictions.h5"
+        self.modelFile = self.rootPath + "/results/model.pth.h5"
 
         # Datasets hierarchy
         self.dataset = ["test", "train"]
@@ -103,6 +104,7 @@ class PathManager :
         mkdirIfNotExist(self.sppCompReportPath)
         mkdirIfNotExist(self.trainingReportPath)
         mkdirIfNotExist(self.localReportPath)
+        mkdirIfNotExist(self.rootPath + "/results")
 
     def saveGeneralReport(self, formattedReport):
         print("Save report")
