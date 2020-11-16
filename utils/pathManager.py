@@ -33,7 +33,7 @@ class PathManager :
         self.modelFile = self.rootPath + "/results/model.pth.h5"
 
         # Datasets hierarchy
-        self.dataset = ["test", "train"]
+        self.dataset = ["test", "train", "validation"]
 
         self.allDataFileName = {}
         self.allDataFileType = {}
@@ -98,8 +98,8 @@ class PathManager :
     def createDirForSppComputation(self):
         for sub in ["/features", "/superpoint_graphs", "/parsed"] : 
             mkdirIfNotExist(self.rootPath + sub)
-            for subsub in ["/test", "/train"] : 
-                mkdirIfNotExist(self.rootPath + sub + subsub)
+            for subsub in self.dataset : 
+                mkdirIfNotExist(self.rootPath + sub + "/" + subsub)
         mkdirIfNotExist(self.reportPath)
         mkdirIfNotExist(self.sppCompReportPath)
         mkdirIfNotExist(self.trainingReportPath)
@@ -128,3 +128,14 @@ class PathManager :
             return self.sppCompTestingCsv
         else:
             return self.sppCompTrainingCsv
+
+    def duplicateLastLineCsv(self, file):
+        data = [] 
+        with open(file, 'r', newline='') as csvfile:
+            csvreader = csv.reader(csvfile, delimiter=';', quotechar='|', quoting=csv.QUOTE_MINIMAL)
+            for row in csvreader:
+                data.append(row)
+
+        data = data[-1]
+        data[0] = str(float(data[0]) + 1) # Increment epoch
+        self.writeCsv(file, [], data)

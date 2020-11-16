@@ -67,8 +67,11 @@ def main(args):
     parser.add_argument('--nworkers', default=0, type=int, help='Num subprocesses to use for data loading. 0 means that the data will be loaded in the main process')
     parser.add_argument('--test_nth_epoch', default=1, type=int, help='Test each n-th epoch during training')
     parser.add_argument('--test_train_nth_epoch', default=1, type=int, help='Test each n-th epoch during training on training data')
+    parser.add_argument('--test_valid_nth_epoch', default=1, type=int, help='Test each n-th epoch during training on validation data')
     parser.add_argument('--save_nth_epoch', default=1, type=int, help='Save model each n-th epoch during training')
     parser.add_argument('--test_multisamp_n', default=10, type=int, help='Average logits obtained over runs with different seeds')
+    parser.add_argument('--not_only_best', action='store_true', help='Keep the model even if the result is worst')
+
 
     # Dataset
     parser.add_argument('--dataset', default='sema3d', help='Dataset name: sema3d|s3dis')
@@ -340,6 +343,9 @@ def main(args):
     
     " Epoch is number of time you parse all data "
     for epoch in range(args.start_epoch, args.epochs):
+        isBest = False
+        
+        firstEpoch = (epoch==args.start_epoch)
         print('Epoch {}/{} ({}):'.format(epoch, args.epochs, args.ROOT_PATH))
 
         " Update tensor if grad is computed "
@@ -349,42 +355,45 @@ def main(args):
         acc, loss, oacc, avg_iou = train()
         print(TRAIN_COLOR + '-> Train Loss: %1.4f' % (loss))
 
-        # 2. Save the model
-        if epoch % args.save_nth_epoch == 0 or epoch==args.epochs-1:
-            torch.save({'epoch': epoch + 1, 'args': args, 'state_dict': model.state_dict(), 'optimizer' : optimizer.state_dict(), 'scaler': scaler}, pathManager.modelFile)
-        
-
         if math.isnan(loss): break
 
-        # 3. Test on validation dataset
-        if (epoch % args.test_train_nth_epoch == 0):
+        # 2. Test on validation dataset
+        if firstEpoch or (epoch % args.test_valid_nth_epoch == 0):
             acc_val, loss_val, oacc_val, avg_iou_val, avg_acc_val, CM_val = eval(True)
             print(TRAIN_COLOR + '-> Validation Loss: %1.4f | Validation accuracy: %3.2f%%' % (loss_val, acc_val))
 
-        new_best_model = False
-
-        # 4. Test on test dataset
-        if (not(args.use_val_set) and (epoch+1) % args.test_nth_epoch == 0) or (args.use_val_set and new_best_model and epoch > 5): 
+        # 3. Test on test dataset
+        if firstEpoch or (epoch % args.test_nth_epoch == 0): 
             acc_test, loss_test, oacc_test, avg_iou_test, avg_acc_test, CM = eval(False)
             print(TEST_COLOR + '-> Test Loss: %1.4f  Test accuracy: %3.2f%%  Test oAcc: %3.2f%%  Test avgIoU: %3.2f%%' % \
                  (loss_test, acc_test, 100*oacc_test, 100*avg_iou_test) + TRAIN_COLOR)
 
-        # 5. Write the csv stat file
+        # 4. Check if isBest
+        if avg_iou_val > best_iou:
+            print(BEST_COLOR + '-> New best model achieved!' + TRAIN_COLOR)
+            best_iou = avg_iou_val
+            isBest = True
+
+        # 5 Bonus. If needed resume last best model
+        if not isBest and not args.not_only_best:
+            args.resume = pathManager.modelFile 
+            model, optimizer = resume(args, dbinfo, pathManager.modelFile)
+        
+        # 6. Write the csv stat file
         # WARNING: All stats are on POINTS and not on SPP
         header = ["epoch", "acc", "loss", "oacc", "avg_iou", "acc_test", "oacc_test", "avg_iou_test", "avg_acc_test", "best_iou"] + list(ColorLabelManager().label2Name.values())[1:] 
+        data = np.concatenate([[int(epoch), acc_val, loss_val, oacc_val, avg_iou_val, acc_test, oacc_test, avg_iou_test, avg_acc_test, best_iou], CM.getAccuracyPerClass(withoutNan=True)])
 
-        acc_per_class = CM.getAccuracyPerClass(withoutNan=True)
-        data = np.concatenate([[epoch, acc_val, loss, oacc, avg_iou, acc_test, oacc_test, avg_iou_test, avg_acc_test, best_iou], acc_per_class])
+        if isBest:
+            pathManager.writeCsv(pathManager.getTrainingCsvReport(), header, data)
+        else:
+            pathManager.duplicateLastLineCsv(pathManager.getTrainingCsvReport())
 
-        pathManager.writeCsv(pathManager.getTrainingCsvReport(), header, data)
+        # 7. Save the model
+        if firstEpoch or (isBest and not args.not_only_best) or (epoch % args.save_nth_epoch == 0):
+            torch.save({'epoch': epoch + 1, 'args': args, 'state_dict': model.state_dict(), 'optimizer' : optimizer.state_dict(), 'scaler': scaler}, pathManager.modelFile)
 
-    # 5 Bonus. If needed resume last best model
-    if args.use_val_set :
-        args.resume = pathManager.modelFile 
-        model, optimizer = resume(args, dbinfo)
-        torch.save({'epoch': epoch + 1, 'args': args, 'state_dict': model.state_dict(), 'optimizer' : optimizer.state_dict()}, pathManager.modelFile)
-    
-    # 6. Final evaluation
+    # 7. Final evaluation
     if args.test_multisamp_n>0 and 'test' in args.db_test_name:
         acc_test, oacc_test, avg_iou_test, per_class_iou_test, predictions_test, avg_acc_test, confusion_matrix = eval_final()
         with h5py.File(pathManager.predictionFile, 'w') as hf:
