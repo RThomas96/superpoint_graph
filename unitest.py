@@ -31,3 +31,5 @@ superpointComputation(["test2", "--voxelize", "--voxel_width", "0.1"])
 train(["test2", "--epoch", "10"])
 
 visualize(["test2", "test", "LPA3-1", "--outType", "sptgd"])
+
+train(["test2", "--epoch", "15", "--resume"])

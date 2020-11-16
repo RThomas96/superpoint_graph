@@ -159,12 +159,11 @@ def main(args):
 
     # Create model and optimizer
     if args.resume :
-        model, optimizer, stats = resume(args, dbinfo)
+        model, optimizer = resume(args, dbinfo, pathManager.modelFile)
     else:
         print("Setup CUDA model")
         model = create_model(args, dbinfo)
         optimizer = create_optimizer(args, model)
-        stats = []
 
     train_dataset, test_dataset, valid_dataset, scaler = create_dataset(args)
 
@@ -332,10 +331,7 @@ def main(args):
 
     ############
     # Training loop
-    try:
-        best_iou = stats[-1]['best_iou']
-    except:
-        best_iou = 0
+    best_iou = 0
     TRAIN_COLOR = '\033[0m'
     VAL_COLOR = '\033[0;94m' 
     TEST_COLOR = '\033[0;93m'
@@ -385,7 +381,7 @@ def main(args):
     # 5 Bonus. If needed resume last best model
     if args.use_val_set :
         args.resume = pathManager.modelFile 
-        model, optimizer, stats = resume(args, dbinfo)
+        model, optimizer = resume(args, dbinfo)
         torch.save({'epoch': epoch + 1, 'args': args, 'state_dict': model.state_dict(), 'optimizer' : optimizer.state_dict()}, pathManager.modelFile)
     
     # 6. Final evaluation
@@ -397,10 +393,10 @@ def main(args):
 
         print('-> Multisample {}: Test accuracy: {}, \tTest oAcc: {}, \tTest avgIoU: {}, \tTest mAcc: {}'.format(args.test_multisamp_n, acc_test, oacc_test, avg_iou_test, avg_acc_test))
 
-def resume(args, dbinfo):
+def resume(args, dbinfo, modelFile):
     """ Loads model and optimizer state from a previous checkpoint. """
     print("=> loading checkpoint '{}'".format(args.resume))
-    checkpoint = torch.load(pathManager.modelFile)
+    checkpoint = torch.load(modelFile)
     
     checkpoint['args'].model_config = args.model_config #to ensure compatibility with previous arguments convention
     #this should be removed once new models are uploaded
@@ -415,11 +411,7 @@ def resume(args, dbinfo):
     if 'optimizer' in checkpoint: optimizer.load_state_dict(checkpoint['optimizer'])
     for group in optimizer.param_groups: group['initial_lr'] = args.lr
     args.start_epoch = checkpoint['epoch']
-    #try:
-    #    stats = json.loads(open(os.path.join(os.path.dirname(args.resume), 'trainlog.json')).read())
-    #except:
-    #    stats = []
-    return model, optimizer, stats
+    return model, optimizer
     
 def create_model(args, dbinfo):
     """ Creates model """

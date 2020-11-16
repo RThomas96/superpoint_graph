@@ -128,4 +128,3 @@ class PathManager :
             return self.sppCompTestingCsv
         else:
             return self.sppCompTrainingCsv
-
