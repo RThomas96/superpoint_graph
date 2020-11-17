@@ -31,7 +31,7 @@ from reportManager import SPPComputationReportManager as ReportManager
 
 import libcp
 import graphs
-import provider
+import cloudIO as io
 
 # Label check is different cause laz format always output labels
 def has_labels(labels, dataType):
@@ -214,7 +214,7 @@ def main(args):
             # Step 1: Features file computation
             if (os.path.isfile(featureFile) and not args.overwrite) or args.keep_features :
                 print(tab + "Reading the existing feature file...")
-                geof, xyz, rgb, graph_nn, labels = provider.read_features(featureFile)
+                geof, xyz, rgb, graph_nn, labels = io.read_features(featureFile)
             else :
                 if args.save:
                     storePreviousFile(featureFile, timeStamp)
@@ -230,7 +230,7 @@ def main(args):
                         print(tab + "Reduce point density")
                         mkdirIfNotExist(pathManager.rootPath + "/data/" + dataset + "-voxelised/")
                         if args.voxel_width > 0:
-                            provider.reduceDensity(dataFile, voxelisedFile, args.voxel_width, False if args.keep_density else True)
+                            io.reduceDensity(dataFile, voxelisedFile, args.voxel_width, False if args.keep_density else True)
     
                         print(tab + "Save reduced density")
                     dataFile = voxelisedFile
@@ -238,7 +238,7 @@ def main(args):
                     print("Voxelisation step skipped")
                     print("Read data file")
     
-                xyz, rgb, labels, objects = provider.read_file(dataFile, dataType)
+                xyz, rgb, labels, objects = io.read_file(dataFile, dataType)
                 if has_labels(labels, dataType):
                     print("Labels found")
                 else :
@@ -261,7 +261,7 @@ def main(args):
                 del target_fea
     
                 # Step 1.4: Compute geometric features
-                provider.write_features(featureFile, geof, xyz, rgb, graph_nn, labels)
+                io.write_features(featureFile, geof, xyz, rgb, graph_nn, labels)
                 timer.stop(2)
     
             # Step 2: Compute superpoint graph
@@ -269,7 +269,7 @@ def main(args):
             sys.stdout.flush()
             if os.path.isfile(spgFile) and not args.overwrite :
                 print(tab + "Reading the existing superpoint graph file...")
-                graph_sp, components, in_component = provider.read_spg(spgFile)
+                graph_sp, components, in_component = io.read_spg(spgFile)
             else:
                 if args.save:
                     storePreviousFile(spgFile, timeStamp)
@@ -301,7 +301,7 @@ def main(args):
                 # "sp_labels" = nb of points per label
                 # Ex: [ 0, 0, 10, 2] --> 10 pt of label 2 and 2 pt of label 3
     
-                provider.write_spg(spgFile, graph_sp, components, in_component)
+                io.write_spg(spgFile, graph_sp, components, in_component)
             
             if os.path.isfile(parseFile) and not args.overwrite :
                 print(tab + "Reading the existing parsed file...")
@@ -323,7 +323,7 @@ def main(args):
             reportManager.computeStatOnSpp(graph_sp["sp_labels"])
     
         csvReport = reportManager.getCsvReport(dataset)
-        pathManager.writeCsv(pathManager.getSppCompCsvReport(dataset), csvReport[0], csvReport[1])
+        io.writeCsv(pathManager.getSppCompCsvReport(dataset), csvReport[0], csvReport[1])
 
     pathManager.saveGeneralReport(reportManager.getFormattedReport())
 

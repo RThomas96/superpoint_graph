@@ -12,24 +12,26 @@ import sys
 sys.path.append("./partition/")
 from plyfile import PlyData, PlyElement
 from pathlib import Path
-import provider
+import visualisation as visu
+import cloudIO as io
+import h5py
 
 sys.path.append("./supervized_partition/")
-import graph_processing as graph
+#import graph_processing as graph
 from pathManager import PathManager 
 
 def openPredictions(res_file, h5FolderPath, components, xyz):
     try:
-        h5FileFolders = list(provider.h5py.File(res_file, 'r').keys())
+        h5FileFolders = list(h5py.File(res_file, 'r').keys())
         if not os.path.split(h5FolderPath)[0] in h5FileFolders:
             print("%s does not exist in %s" % (h5FolderPath, res_file))
             raise ValueError("%s does not exist in %s" % (h5FolderPath, res_file))
-        pred_red  = np.array(provider.h5py.File(res_file, 'r').get(h5FolderPath))        
+        pred_red  = np.array(h5py.File(res_file, 'r').get(h5FolderPath))        
         if (len(pred_red) != len(components)):
             print(len(pred_red))
             print(len(components))
             raise ValueError("It looks like the spg is not adapted to the result file") 
-        return provider.reduced_labels2full(pred_red, components, len(xyz))
+        return visu.reduced_labels2full(pred_red, components, len(xyz))
     except OSError:
         raise ValueError("%s does not exist in %s" % (h5FolderPath, res_file))
 
@@ -69,32 +71,32 @@ def main(args):
     #if args.supervized:
     #    xyz, rgb, edg_source, edg_target, is_transition, local_geometry, labels, objects, elevation, xyn = graph.read_structure(supervized_fea_file, False)
     #else:
-    geof, xyz, rgb, graph_nn, labels = provider.read_features(featureFile)
+    geof, xyz, rgb, graph_nn, labels = io.read_features(featureFile)
     
-    graph_spg, components, in_component = provider.read_spg(spgFile)
+    graph_spg, components, in_component = io.read_spg(spgFile)
     
     if outStd:
-        provider.writeGeofstd(stdFile, xyz, geof, components, in_component)
+        visu.writeGeofstd(stdFile, xyz, geof, components, in_component)
     
     if outGeof:
-        provider.writeGeof(geofFile, xyz, geof)
+        visu.writeGeof(geofFile, xyz, geof)
     
     if args.supervized and outTransitions:
-        provider.writeTransition(transFile, xyz, edg_source, is_transition)
+        visu.writeTransition(transFile, xyz, edg_source, is_transition)
     
     if outPredictions:
         try:
             pred_full = openPredictions(res_file, args.dataset + "/" + fileName, components, xyz)
-            provider.writePrediction(predictionFile, xyz, pred_full)
+            visu.writePrediction(predictionFile, xyz, pred_full)
         except ValueError:
             print("Can't visualize predictions")
     
     if outSuperpoints and args.filter_label is not None:
         print("Filter activated")
-        provider.writePartitionFilter(sppFile, xyz, components, graph_spg["sp_labels"], args.filter_label)
+        visu.writePartitionFilter(sppFile, xyz, components, graph_spg["sp_labels"], args.filter_label)
     
     if outSuperpoints and args.filter_label is None:
-        provider.writePartition(sppFile, xyz, components)
+        visu.writePartition(sppFile, xyz, components)
 
 if __name__ == "__main__":
     main(sys.argv[1:])

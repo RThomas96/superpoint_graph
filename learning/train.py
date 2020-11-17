@@ -21,6 +21,7 @@ from tqdm import tqdm
 import logging
 from collections import defaultdict
 import h5py
+import cloudIO as io
 #from IPython.core.debugger import set_trace
 
 import torch
@@ -385,9 +386,9 @@ def main(args):
         data = np.concatenate([[int(epoch), acc_val, loss_val, oacc_val, avg_iou_val, acc_test, oacc_test, avg_iou_test, avg_acc_test, best_iou], CM.getAccuracyPerClass(withoutNan=True)])
 
         if isBest:
-            pathManager.writeCsv(pathManager.getTrainingCsvReport(), header, data)
+            io.writeCsv(pathManager.getTrainingCsvReport(), header, data)
         else:
-            pathManager.duplicateLastLineCsv(pathManager.getTrainingCsvReport())
+            io.duplicateLastLineCsv(pathManager.getTrainingCsvReport())
 
         # 7. Save the model
         if firstEpoch or (isBest and not args.not_only_best) or (epoch % args.save_nth_epoch == 0):
@@ -435,8 +436,8 @@ def create_model(args, dbinfo):
 
     model.ptn = pointnet.PointNet(args.ptn_widths[0], args.ptn_widths[1], args.ptn_widths_stn[0], args.ptn_widths_stn[1], dbinfo['node_feats'], args.ptn_nfeat_stn, prelast_do=args.ptn_prelast_do)
 
-    print('Total number of parameters: {}'.format(sum([p.numel() for p in model.parameters()])))
-    print(model)    
+    #print('Total number of parameters: {}'.format(sum([p.numel() for p in model.parameters()])))
+    #print(model)    
     if args.cuda: 
         model.cuda()
     return model 

@@ -112,14 +112,6 @@ class PathManager :
         file.write(formattedReport)
         file.close()
 
-    def writeCsv(self, file, header, data):
-        isFile = os.path.isfile(file)
-        with open(file, 'a', newline='') as csvfile:
-            spamwriter = csv.writer(csvfile, delimiter=';', quotechar='|', quoting=csv.QUOTE_MINIMAL)
-            if not isFile:
-                spamwriter.writerow(header)
-            spamwriter.writerow(data)
-
     def getTrainingCsvReport(self):
         return self.trainingCsv
 
@@ -129,13 +121,3 @@ class PathManager :
         else:
             return self.sppCompTrainingCsv
 
-    def duplicateLastLineCsv(self, file):
-        data = [] 
-        with open(file, 'r', newline='') as csvfile:
-            csvreader = csv.reader(csvfile, delimiter=';', quotechar='|', quoting=csv.QUOTE_MINIMAL)
-            for row in csvreader:
-                data.append(row)
-
-        data = data[-1]
-        data[0] = str(float(data[0]) + 1) # Increment epoch
-        self.writeCsv(file, [], data)
