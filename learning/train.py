@@ -43,7 +43,7 @@ sys.path.append("./utils")
 
 from colorLabelManager import ColorLabelManager
 from pathManager import PathManager
-from reportManager import ConfusionMatrix
+from confusionMatrix import ConfusionMatrix
 
 def main(args):
     parser = argparse.ArgumentParser(description='Large-scale Point Cloud Semantic Segmentation with Superpoint Graphs')
@@ -189,6 +189,7 @@ def main(args):
         loss_meter = tnt.meter.AverageValueMeter()
         acc_meter = tnt.meter.ClassErrorMeter(accuracy=True)
         confusion_matrix = metrics.ConfusionMatrix(dbinfo['classes'])
+        CM = ConfusionMatrix(dbinfo['classes'])
         t0 = time.time()
 
         # iterate over dataset in batches
@@ -230,12 +231,14 @@ def main(args):
             o_cpu, t_cpu, tvec_cpu = filter_valid(outputs.data.cpu().numpy(), label_mode_cpu.numpy(), label_vec_cpu.numpy())
             acc_meter.add(o_cpu, t_cpu)
             confusion_matrix.count_predicted_batch(tvec_cpu, np.argmax(o_cpu,1))
+            for i, label in enumerate(np.argmax(o_cpu, axis=1)):
+                CM.addBatchPredictionVec(label, tvec_cpu[i, :])
 
             logging.debug('Batch loss %f, Loader time %f ms, Trainer time %f ms.', loss.data.item(), t_loader, t_trainer)
             t0 = time.time()
 
         #acc, loss, oacc, avg_iou
-        return acc_meter.value()[0], loss_meter.value()[0], confusion_matrix.get_overall_accuracy(), confusion_matrix.get_average_intersection_union()
+        return acc_meter.value()[0], loss_meter.value()[0], confusion_matrix.get_overall_accuracy(), confusion_matrix.get_average_intersection_union(), CM
 
     ############
     def eval(is_valid = False):
@@ -353,7 +356,8 @@ def main(args):
         scheduler.step() 
 
         # 1. Train
-        acc, loss, oacc, avg_iou = train()
+        acc, loss, oacc, avg_iou, CM_train = train()
+
         print(TRAIN_COLOR + '-> Train Loss: %1.4f' % (loss))
 
         if math.isnan(loss): break
@@ -361,6 +365,20 @@ def main(args):
         # 2. Test on validation dataset
         if firstEpoch or (epoch % args.test_valid_nth_epoch == 0):
             acc_val, loss_val, oacc_val, avg_iou_val, avg_acc_val, CM_val = eval(True)
+            print("COMPARE")
+            #print(str(acc_val) + " -- " + str(CM_val.getTotalAccuracy()))
+            #print(str(oacc_val) + " -- " + str(CM_val.getTotalAccuracy()))
+            #print(str(avg_iou_val) + " -- " + str(CM_val.getAvgIoU()))
+            #print(str(avg_acc_val) + " -- " + str(CM_val.getAvgAccuracy()))
+            print("acc_val -> " + str(acc_val))
+            print("oacc_val -> " + str(oacc_val))
+            print("avg_iou_val -> " + str(avg_iou_val))
+            print("avg_acc_val -> " + str(avg_acc_val))
+            print("------------")
+            print("acc -> " + str(CM_val.getAccuracy()))
+            print("recall -> " + str(CM_val.getAvgRecall()))
+            print("IoU -> " + str(CM_val.getAvgIoU()))
+            print("precision -> " + str(CM_val.getAvgPrecision()))
             print(TRAIN_COLOR + '-> Validation Loss: %1.4f | Validation accuracy: %3.2f%%' % (loss_val, acc_val))
 
         # 3. Test on test dataset

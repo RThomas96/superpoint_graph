@@ -1,5 +1,4 @@
 import os
-import csv
 from glob import glob
 from datetime import datetime
 

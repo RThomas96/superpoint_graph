@@ -6,54 +6,8 @@ from collections import Counter
 from colorLabelManager import ColorLabelManager
 from datetime import datetime
 from sklearn.metrics import confusion_matrix
+from confusionMatrix import ConfusionMatrix
 import math
-
-class ConfusionMatrix:
-    def __init__(self, number_of_labels = 2):
-        self.number_of_labels = number_of_labels
-        self.confusionMatrix = np.matrix(np.zeros(shape=(self.number_of_labels,self.number_of_labels)))
-
-    def addPrediction(self, prediction, groundTruth):
-        CM = np.matrix(confusion_matrix(predictions, groundTruth))
-        self.confusionMatrix += CM
-
-    # Add "nbPrediction" times the value "prediction" into the confusion matrix, if the groundTruth is "ground truth"
-    def addBatchPrediction(self, prediction, nbPrediction, groundTruth):
-        self.confusionMatrix[groundTruth, prediction] += nbPrediction
-
-    # Add a prediction when the ground truth is a vector
-    def addBatchPredictionVec(self, prediction, groundTruth):
-        self.confusionMatrix.getA()[:, prediction] += groundTruth
-
-    def getTruePositivPerClass(self):
-        return np.diagonal(self.confusionMatrix)
-
-    def getTruePositiv(self, label):
-        return self.getTruePositivPerClass()[label]
-
-    def getFalsePositivPerClass(self):
-        res = np.copy(self.confusionMatrix)
-        res[np.diag_indices_from(res)] = 0.
-        return res.sum(axis=0)
-
-    def getFalsePositiv(self, label):
-        return self.getFalsePositivPerClass()[label]
-
-    def getTotalAccuracy(self): 
-        return (self.getTruePositivPerClass().sum() / self.getNbValues()) * 100
-
-    def getAccuracyPerClass(self, withoutNan = False): 
-        all = np.array(self.confusionMatrix.sum(axis=0)).flatten()
-        if withoutNan: 
-            all[all == 0] += 1
-        return (self.getTruePositivPerClass() / all) * 100 
-
-    def getNbValues(self):
-        return self.confusionMatrix.sum()
-
-    def getNbValuesPerClass(self):
-        return self.confusionMatrix.sum(axis=1)
-
 
 class StatManagerOnSPP:
     def __init__(self, nbLabels):
@@ -77,7 +31,7 @@ class StatManagerOnSPP:
         return self.CM.getNbValues()
 
     def getTotalAccuracy(self): 
-        return self.CM.getTotalAccuracy()
+        return self.CM.getAccuracy()
 
     def getAccuracyPerClass(self): 
         return self.CM.getAccuracyPerClass()
