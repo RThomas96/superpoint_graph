@@ -4,6 +4,8 @@ from builtins import range
 
 import numpy as np
 
+# Official metrics computation from semantic3d, use for official computation score !!
+
 # extended official code from http://www.semantic3d.net/scripts/metric.py
 class ConfusionMatrix:
   """Streaming interface to allow for any source of predictions. Initialize it, count predictions one by one, then print confusion matrix and intersection-union score"""
@@ -30,6 +32,9 @@ class ConfusionMatrix:
   def get_confusion_matrix(self):
     return self.confusion_matrix
   """returns list of 64-bit floats"""
+
+  # Main function, compute IoU, used to validate network results
+  # Same result than avg IoU of custom confusion matrix, check
   def get_intersection_union_per_class(self):
     matrix_diagonal = [self.confusion_matrix[i][i] for i in range(self.number_of_labels)]
     errors_summed_by_row = [0] * self.number_of_labels
@@ -52,6 +57,9 @@ class ConfusionMatrix:
     return [float(matrix_diagonal[i]) / divisor[i] for i in range(self.number_of_labels)]
   """returns 64-bit float"""
 
+
+  # Main function, compute Acc, used to validate network results
+  # Same result than acc of custom confusion matrix, check
   def get_overall_accuracy(self):
     matrix_diagonal = 0
     all_values = 0
@@ -70,6 +78,9 @@ class ConfusionMatrix:
     class_seen = ((self.confusion_matrix.sum(1)+self.confusion_matrix.sum(0))!=0).sum()
     return sum(values) / class_seen
 
+  # Bugged function
+  # Not in official metrics
+  # Not used in original spp
   def get_mean_class_accuracy(self):  # added
     re = 0
     for i in range(self.number_of_labels):

@@ -28,6 +28,7 @@ from sklearn.linear_model import RANSACRegressor
 from colorLabelManager import ColorLabelManager
 from pathManager import PathManager
 from reportManager import SPPComputationReportManager as ReportManager
+from timer import Timer
 
 import libcp
 import graphs
@@ -39,37 +40,6 @@ def has_labels(labels, dataType):
         return labels.sum() > 0
     else:
         return len(labels) > 0
-
-# Record a set of interval
-class Timer:
-    def __init__(self, step):
-        self.times = np.zeros(step)
-
-    def start(self, step):
-        self.times[step] = time.perf_counter()
-
-    def stop(self, step):
-        self.times[step] =  time.perf_counter() - self.times[step]
-
-    def getFormattedTimer(self, names):
-        strTime = ""
-        for i, x in enumerate(self.times):
-            strTime += names[i]
-            strTime += ": " 
-            if x > 3600:
-                strTime += str(round(x / 60. / 60., 2)) 
-                strTime += "h / "
-            elif x > 60:
-                strTime += str(round(x / 60., 2)) 
-                strTime += "min / "
-            else:
-                strTime += str(round(x, 2)) 
-                strTime += "s / "
-        return strTime
-
-    def reset(self):
-        for i in self.times:
-            i = 0
 
 def parseCloudForPointNET(featureFile, graphFile, parseFile):
     """ Preprocesses data by splitting them by components and normalizing."""

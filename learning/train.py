@@ -44,6 +44,7 @@ sys.path.append("./utils")
 from colorLabelManager import ColorLabelManager
 from pathManager import PathManager
 from confusionMatrix import ConfusionMatrix
+from timer import Timer
 
 def main(args):
     parser = argparse.ArgumentParser(description='Large-scale Point Cloud Semantic Segmentation with Superpoint Graphs')
@@ -186,16 +187,22 @@ def main(args):
         loader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size, collate_fn=spg.eccpc_collate, num_workers=args.nworkers, shuffle=True, drop_last=True)
         if logging.getLogger().getEffectiveLevel() > logging.DEBUG: loader = tqdm(loader, ncols=65)
 
+        # tnt.meter.AverageValueMeter() --> just average a value
         loss_meter = tnt.meter.AverageValueMeter()
-        acc_meter = tnt.meter.ClassErrorMeter(accuracy=True)
-        confusion_matrix = metrics.ConfusionMatrix(dbinfo['classes'])
-        CM = ConfusionMatrix(dbinfo['classes'])
-        t0 = time.time()
+
+        # Official confusion matrix from semantic3D
+        #officialConfusionMatrix = metrics.ConfusionMatrix(dbinfo['classes'])
+
+        # Custom confusion matrix
+        confusionMatrix = ConfusionMatrix(dbinfo['classes'])
+        confusionMatrixSpp = ConfusionMatrix(dbinfo['classes'])
+
+        timer = Timer(2)
+        timer.start(0)
 
         # iterate over dataset in batches
-        for bidx, (targets, GIs, clouds_data) in enumerate(loader):
-            #set_trace()
-            t_loader = 1000*(time.time()-t0)
+        for targets, GIs, clouds_data in loader:
+            timer.stop(0)
 
             model.ecc.set_info(GIs, args.cuda)
             " Here label_mode is the ground truth, stored on the first column of targets"
@@ -208,7 +215,7 @@ def main(args):
                 label_mode, label_vec, segm_size = label_mode_cpu, label_vec_cpu.float(), segm_size_cpu.float()
 
             optimizer.zero_grad()
-            t0 = time.time()
+            timer.start(1)
 
             embeddings = ptnCloudEmbedder.run(model, *clouds_data)
             outputs = model.ecc(embeddings)
@@ -223,39 +230,46 @@ def main(args):
                     p.grad.data.clamp_(-args.grad_clip, args.grad_clip)
             optimizer.step()
 
-            t_trainer = 1000*(time.time()-t0)
-            #loss_meter.add(loss.data[0]) # pytorch 0.3
+            timer.stop(1)
             loss_meter.add(loss.item()) # pytorch 0.4
 
             " Remove all nodes without ground truth "
             o_cpu, t_cpu, tvec_cpu = filter_valid(outputs.data.cpu().numpy(), label_mode_cpu.numpy(), label_vec_cpu.numpy())
-            acc_meter.add(o_cpu, t_cpu)
-            confusion_matrix.count_predicted_batch(tvec_cpu, np.argmax(o_cpu,1))
-            for i, label in enumerate(np.argmax(o_cpu, axis=1)):
-                CM.addBatchPredictionVec(label, tvec_cpu[i, :])
 
-            logging.debug('Batch loss %f, Loader time %f ms, Trainer time %f ms.', loss.data.item(), t_loader, t_trainer)
-            t0 = time.time()
+            for i, label in enumerate(np.argmax(o_cpu, axis=1)):
+                confusionMatrix.addBatchPredictionVec(label, tvec_cpu[i, :])
+            confusionMatrixSpp.addPrediction(np.argmax(o_cpu, axis=1), t_cpu)
+            
+            #officialConfusionMatrix.count_predicted_batch(tvec_cpu, np.argmax(o_cpu,1))
+            # officialConfusionMatrix.get_average_intersection_union() == confusionMatrix.getAvgIoU()
+
+            #print(timer.getFormattedTimer(["Loader", "Trainer"]))
+            timer.reset()
+            timer.start(0)
 
         #acc, loss, oacc, avg_iou
-        return acc_meter.value()[0], loss_meter.value()[0], confusion_matrix.get_overall_accuracy(), confusion_matrix.get_average_intersection_union(), CM
+        # acc = acc on spp
+        # oacc = acc on point
+        # avg_iou = iou on point
+        return loss_meter.value()[0], confusionMatrix, confusionMatrixSpp
 
     ############
     def eval(is_valid = False):
         """ Evaluated model on test set """
         model.eval()
         
-        if is_valid: #validation
+        if is_valid: # validation dataset
             loader = torch.utils.data.DataLoader(valid_dataset, batch_size=1, collate_fn=spg.eccpc_collate, num_workers=args.nworkers)
-        else: #evaluation
+        else: # test dataset
             loader = torch.utils.data.DataLoader(test_dataset, batch_size=1, collate_fn=spg.eccpc_collate, num_workers=args.nworkers)
             
         if logging.getLogger().getEffectiveLevel() > logging.DEBUG: loader = tqdm(loader, ncols=65)
 
-        acc_meter = tnt.meter.ClassErrorMeter(accuracy=True)
         loss_meter = tnt.meter.AverageValueMeter()
-        confusion_matrix = metrics.ConfusionMatrix(dbinfo['classes'])
-        CM = ConfusionMatrix(dbinfo['classes'])
+
+        #confusion_matrix = metrics.ConfusionMatrix(dbinfo['classes'])
+        confusionMatrix = ConfusionMatrix(dbinfo['classes'])
+        confusionMatrixSpp = ConfusionMatrix(dbinfo['classes'])
 
         # DOOOOC
         # tvec_cpu = groundtruth = [0:2000] with in each case [0:9] number of point for each label
@@ -277,12 +291,11 @@ def main(args):
 
             o_cpu, t_cpu, tvec_cpu = filter_valid(outputs.data.cpu().numpy(), label_mode_cpu.numpy(), label_vec_cpu.numpy())
             if t_cpu.size > 0:
-                acc_meter.add(o_cpu, t_cpu)
-                confusion_matrix.count_predicted_batch(tvec_cpu, np.argmax(o_cpu,1))
+                confusionMatrixSpp.addPrediction(np.argmax(o_cpu, axis=1), t_cpu)
                 for i, label in enumerate(np.argmax(o_cpu, axis=1)):
-                    CM.addBatchPredictionVec(label, tvec_cpu[i, :])
+                    confusionMatrix.addBatchPredictionVec(label, tvec_cpu[i, :])
 
-        return meter_value(acc_meter), loss_meter.value()[0], confusion_matrix.get_overall_accuracy(), confusion_matrix.get_average_intersection_union(), confusion_matrix.get_mean_class_accuracy(), CM #confusion_matrix.get_confusion_matrix()
+        return loss_meter.value()[0], confusionMatrix, confusionMatrixSpp
 
     ############
     def eval_final():
@@ -339,10 +352,13 @@ def main(args):
     ############
     # Training loop
     best_iou = 0
-    TRAIN_COLOR = '\033[0m'
-    VAL_COLOR = '\033[0;94m' 
-    TEST_COLOR = '\033[0;93m'
-    BEST_COLOR = '\033[0;92m'
+    TRAIN_COLOR = '\x1b[96;1m'
+    VAL_COLOR =   '\x1b[94;1m' 
+    TEST_COLOR =  '\x1b[96;1m' 
+    BEST_COLOR =  '\x1b[93;7m'
+    BAD_COLOR =   '\x1b[91;7m'
+    IOU_COLOR =   '\x1b[33;1m'
+    CLOSE =       '\x1b[0m'
     epoch = args.start_epoch
     
     " Epoch is number of time you parse all data "
@@ -350,48 +366,41 @@ def main(args):
         isBest = False
         
         firstEpoch = (epoch==args.start_epoch)
+        print('#################')
         print('Epoch {}/{} ({}):'.format(epoch, args.epochs, args.ROOT_PATH))
 
         " Update tensor if grad is computed "
         scheduler.step() 
 
         # 1. Train
-        acc, loss, oacc, avg_iou, CM_train = train()
+        loss_train, CM_train_pt, CM_train_spp = train()
 
-        print(TRAIN_COLOR + '-> Train Loss: %1.4f' % (loss))
+        print(TRAIN_COLOR + '-> Train Loss: %1.4f' % (loss_train) + CLOSE)
 
-        if math.isnan(loss): break
+        if math.isnan(loss_train): break
 
         # 2. Test on validation dataset
         if firstEpoch or (epoch % args.test_valid_nth_epoch == 0):
-            acc_val, loss_val, oacc_val, avg_iou_val, avg_acc_val, CM_val = eval(True)
-            print("COMPARE")
-            #print(str(acc_val) + " -- " + str(CM_val.getTotalAccuracy()))
-            #print(str(oacc_val) + " -- " + str(CM_val.getTotalAccuracy()))
-            #print(str(avg_iou_val) + " -- " + str(CM_val.getAvgIoU()))
-            #print(str(avg_acc_val) + " -- " + str(CM_val.getAvgAccuracy()))
-            print("acc_val -> " + str(acc_val))
-            print("oacc_val -> " + str(oacc_val))
-            print("avg_iou_val -> " + str(avg_iou_val))
-            print("avg_acc_val -> " + str(avg_acc_val))
-            print("------------")
-            print("acc -> " + str(CM_val.getAccuracy()))
-            print("recall -> " + str(CM_val.getAvgRecall()))
-            print("IoU -> " + str(CM_val.getAvgIoU()))
-            print("precision -> " + str(CM_val.getAvgPrecision()))
-            print(TRAIN_COLOR + '-> Validation Loss: %1.4f | Validation accuracy: %3.2f%%' % (loss_val, acc_val))
+            loss_val, CM_val_pt, CM_val_spp = eval(True)
+            acc_pt_val, avg_iou_val, avg_prec_val, avg_rec_val, iou_per_class_val, prec_per_class_val, rec_per_class_val = CM_val_pt.getStats()
+            acc_spp_val = CM_val_spp.getAccuracy()
+            print(VAL_COLOR + 'Validation -> loss: %1.4f,  acc pt: %3.2f%%,  acc spp: %3.2f%%,  avgIoU: %3.2f%%' % (loss_val*100, acc_pt_val*100, acc_spp_val*100, avg_iou_val*100) + CLOSE)
 
         # 3. Test on test dataset
         if firstEpoch or (epoch % args.test_nth_epoch == 0): 
-            acc_test, loss_test, oacc_test, avg_iou_test, avg_acc_test, CM = eval(False)
-            print(TEST_COLOR + '-> Test Loss: %1.4f  Test accuracy: %3.2f%%  Test oAcc: %3.2f%%  Test avgIoU: %3.2f%%' % \
-                 (loss_test, acc_test, 100*oacc_test, 100*avg_iou_test) + TRAIN_COLOR)
+            loss_test, CM_test_pt, CM_test_spp = eval(False)
+            acc_pt_test, avg_iou_test, avg_prec_test, avg_rec_test, iou_per_class_test, prec_per_class_test, rec_per_class_test = CM_test_pt.getStats()
+            acc_spp_test = CM_test_spp.getAccuracy()
+            print(IOU_COLOR + 'IoU: %3.2f%%' % (avg_iou_test*100) + CLOSE)
+            print(TEST_COLOR + 'Test       -> loss: %1.4f,  acc pt: %3.2f%%,  acc spp: %3.2f%%,  avgIoU: %3.2f%%' % (loss_test*100, acc_pt_test*100, acc_spp_test*100, avg_iou_test*100) + CLOSE)
 
         # 4. Check if isBest
         if avg_iou_val > best_iou:
-            print(BEST_COLOR + '-> New best model achieved!' + TRAIN_COLOR)
+            print(BEST_COLOR + 'New best model achieved!' + CLOSE)
             best_iou = avg_iou_val
             isBest = True
+        else:
+            print(BAD_COLOR + 'Bad model' + CLOSE)
 
         # 5 Bonus. If needed resume last best model
         if not isBest and not args.not_only_best:
@@ -400,13 +409,21 @@ def main(args):
         
         # 6. Write the csv stat file
         # WARNING: All stats are on POINTS and not on SPP
-        header = ["epoch", "acc", "loss", "oacc", "avg_iou", "acc_test", "oacc_test", "avg_iou_test", "avg_acc_test", "best_iou"] + list(ColorLabelManager().label2Name.values())[1:] 
-        data = np.concatenate([[int(epoch), acc_val, loss_val, oacc_val, avg_iou_val, acc_test, oacc_test, avg_iou_test, avg_acc_test, best_iou], CM.getAccuracyPerClass(withoutNan=True)])
 
+        # Validation
+        header = ["epoch", "acc_pt", "acc_spp", "loss", "avg_iou", "avg_prec", "avg_rec"] + list(ColorLabelManager().label2Name.values())[1:] + list(ColorLabelManager().label2Name.values())[1:] + list(ColorLabelManager().label2Name.values())[1:]
+        data = np.concatenate([[int(epoch), acc_pt_val, acc_spp_val, loss_val, avg_iou_val, avg_prec_val, avg_rec_val], iou_per_class_val, prec_per_class_val, rec_per_class_val])
         if isBest:
-            io.writeCsv(pathManager.getTrainingCsvReport(), header, data)
+            io.writeCsv(pathManager.validationCsv, header, data)
         else:
-            io.duplicateLastLineCsv(pathManager.getTrainingCsvReport())
+            io.duplicateLastLineCsv(pathManager.validationCsv)
+
+        if firstEpoch or (epoch % args.test_nth_epoch == 0): 
+            header = ["epoch", "acc_pt", "acc_spp", "loss", "avg_iou", "avg_prec", "avg_rec"] + list(ColorLabelManager().label2Name.values())[1:] + list(ColorLabelManager().label2Name.values())[1:] + list(ColorLabelManager().label2Name.values())[1:]
+            data = np.concatenate([[int(epoch), acc_pt_test, acc_spp_test, loss_test, avg_iou_test, avg_prec_test, avg_rec_test], iou_per_class_test, prec_per_class_test, rec_per_class_test])
+            io.writeCsv(pathManager.testCsv, header, data)
+        else:
+            io.duplicateLastLineCsv(pathManager.testCsv)
 
         # 7. Save the model
         if firstEpoch or (isBest and not args.not_only_best) or (epoch % args.save_nth_epoch == 0):

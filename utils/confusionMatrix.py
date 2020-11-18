@@ -22,8 +22,10 @@ class ConfusionMatrix:
         self.confusionMatrix = np.matrix(np.zeros(shape=(self.number_of_labels,self.number_of_labels)))
 
     def addPrediction(self, prediction, groundTruth):
-        CM = np.matrix(confusion_matrix(predictions, groundTruth))
-        self.confusionMatrix += CM
+        #CM = np.matrix(confusion_matrix(prediction, groundTruth))
+        #self.confusionMatrix += CM
+        for i, pred in enumerate(prediction):
+            self.addBatchPrediction(pred, 1, groundTruth[i])
 
     # Add "nbPrediction" times the value "prediction" into the confusion matrix, if the groundTruth is "ground truth"
     def addBatchPrediction(self, prediction, nbPrediction, groundTruth):
@@ -65,47 +67,62 @@ class ConfusionMatrix:
         return (self.getTruePositivPerClass().sum() / self.getNbValues())
 
     # precision = tp / (tp + fp)
-    def getPrecisionPerClass(self, withoutNan = False): 
+    def getPrecisionPerClass(self): 
         all = self.getTruePositivPerClass() + self.getFalsePositivPerClass()
-        if withoutNan: 
-            all[all == 0] = 1
-        return (self.getTruePositivPerClass() / all)
+        res = (self.getTruePositivPerClass() / all)
+        return self.removeNanForUsedClass(res)
 
     # recall = tp / (tp + fn)
-    def getRecallPerClass(self, withoutNan = False): 
+    def getRecallPerClass(self): 
         all = self.getTruePositivPerClass() + self.getFalseNegativPerClass()
-        if withoutNan: 
-            all[all == 0] = 1
-        return (self.getTruePositivPerClass() / all)
+        res = (self.getTruePositivPerClass() / all)
+        return self.removeNanForUsedClass(res)
 
     # iou = tp / (tp + fp + fn)
-    def getIoUPerClass(self, withoutNan = False):
+    def getIoUPerClass(self):
         all = self.getTruePositivPerClass() + self.getFalsePositivPerClass() + self.getFalseNegativPerClass()
-        if withoutNan:
-            all[all == 0] = 1
-        return (self.getTruePositivPerClass() / all )
+        return [float(val) / all[i] for i, val in enumerate(self.getTruePositivPerClass()) ]
 
     def getAvgIoU(self):
-        values = self.getIoUPerClass(withoutNan=True)
-        valWithNan = self.getIoUPerClass(withoutNan=False)
-        # A class with 0 ground truth point has nan IoU
-        nb_class_seen = len([i for i in valWithNan if not math.isnan(i)]) 
+        #from pudb import set_trace; set_trace()
+        values = np.array(self.getIoUPerClass())
+        values[self.getNotUseClass()] = 0 # We do not want Nan values
+        nb_class_seen = len(self.getUsedClass()) 
         return (sum(values) / nb_class_seen)
 
     def getAvgRecall(self):
-        values = self.getRecallPerClass(withoutNan=True)
-        valWithNan = self.getRecallPerClass(withoutNan=False)
-        # A class with 0 ground truth point has nan Recall
-        nb_class_seen = len([i for i in valWithNan if not math.isnan(i)]) 
+        values = np.array(self.getRecallPerClass())
+        values[self.getNotUseClass()] = 0 # We do not want Nan values
+        nb_class_seen = len(self.getUsedClass()) 
         return (sum(values) / nb_class_seen)
 
     def getAvgPrecision(self):
-        values = self.getPrecisionPerClass(withoutNan=True)
-        valWithNan = self.getPrecisionPerClass(withoutNan=False)
-        # A class with 0 ground truth point has nan Precision
-        nb_class_seen = len([i for i in valWithNan if not math.isnan(i)]) 
-        #from pudb import set_trace; set_trace()
+        values = np.array(self.getPrecisionPerClass())
+        values[self.getNotUseClass()] = 0 # We do not want Nan values
+        nb_class_seen = len(self.getUsedClass()) 
         return (sum(values) / nb_class_seen)
 
-    def getAccuracyPerClass(self, withoutNan=True):
-        return self.getIoUPerClass(withoutNan)
+    def getAccuracyPerClass(self):
+        return self.getIoUPerClass()
+
+    def getStats(self):
+        return self.getAccuracy(), self.getAvgIoU(), self.getAvgPrecision(), self.getAvgRecall(), self.getIoUPerClass(), self.getPrecisionPerClass(), self.getRecallPerClass()
+
+    # Return classes without any prediction or ground truth
+    def getNotUseClass(self):
+        row = np.array(self.confusionMatrix).sum(axis=1)
+        column = np.array(self.confusionMatrix).sum(axis=0)
+        add = row + column
+        return np.where(add == 0)[0]
+
+    def getUsedClass(self):
+        row = np.array(self.confusionMatrix).sum(axis=1)
+        column = np.array(self.confusionMatrix).sum(axis=0) 
+        add = row + column
+        return np.where(add != 0)[0]
+
+    def removeNanForUsedClass(self, vec):
+        for i in self.getUsedClass():
+            if math.isnan(vec[i]):
+                vec[i] = 0
+        return vec

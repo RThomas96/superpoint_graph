@@ -25,7 +25,8 @@ class PathManager :
         self.sppCompTrainingCsv = self.sppCompReportPath + "/statsTraining.csv"
         self.sppCompTestingCsv = self.sppCompReportPath + "/statsTesting.csv"
 
-        self.trainingCsv = self.trainingReportPath + "/statsTraining.csv"
+        self.validationCsv = self.trainingReportPath + "/statsValidation.csv"
+        self.testCsv = self.trainingReportPath + "/statsTest.csv"
 
         # Result hierarchy
         self.predictionFile = self.rootPath + "/results/predictions.h5"
@@ -110,9 +111,6 @@ class PathManager :
         file = open(self.generalReport, "w")
         file.write(formattedReport)
         file.close()
-
-    def getTrainingCsvReport(self):
-        return self.trainingCsv
 
     def getSppCompCsvReport(self, dataset):
         if dataset == "test":
