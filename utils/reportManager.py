@@ -43,6 +43,7 @@ class SPPComputationReportManager:
         self.knnGeo = args.knn_geofeatures 
         self.knnAdj = args.knn_adj
         self.lambdaWeight = args.lambda_edge_weight
+        self.voxel_width = args.voxel_width
 
         self.stats = {"test" : StatManagerOnSPP(nbLabels), "train" : StatManagerOnSPP(nbLabels), "validation" : StatManagerOnSPP(nbLabels)}
 
@@ -65,6 +66,7 @@ class SPPComputationReportManager:
         stat = self.stats[dataset]
 
         header = list()
+        header.append("Voxel width")
         header.append("Regularization strength")
         header.append("Lambda edge weight")
         header.append("Knn geometric features")
@@ -79,6 +81,7 @@ class SPPComputationReportManager:
             header.append(name)
 
         value = list()
+        value.append(self.voxel_width)
         value.append(self.regStrength)
         value.append(self.lambdaWeight)
         value.append(self.knnGeo)

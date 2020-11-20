@@ -29,6 +29,9 @@ class PathManager :
         # Datasets hierarchy
         self.dataset = ["test", "train", "validation"]
 
+        # Usefull to choose the right voxel file 
+        self.voxelWidth = "0.03"
+
         self.allDataFileName = {}
         self.allDataFileType = {}
         for folder in self.dataset:
@@ -67,7 +70,7 @@ class PathManager :
         spgFile  = self.rootPath + "/superpoint_graphs/" + dataset + "/" + fileName + ".h5" 
         parseFile  = self.rootPath + "/parsed/" + dataset + "/" + fileName + ".h5"
     
-        voxelisedFile  = self.rootPath + "/data/" + dataset + "-voxelised/" + fileName + '.' + dataType
+        voxelisedFile  = self.rootPath + "/data/" + dataset + "-voxelised/" + fileName + '-' + self.voxelWidth + '.' + dataType
         #voxelisedFile  = self.rootPath + "/data/voxelised/" + dataset + "/" + fileName + "/" + fileName + "-prunned" + str(args.voxel_width).replace(".", "-") + "." + dataType
         return fileName, dataFile, dataType, voxelisedFile, featureFile, spgFile, parseFile
 

@@ -47,7 +47,10 @@ def mergeCSV(fileName1, fileName2):
 def mergeCsvPerPair(files1, files2):
     combi=[]
     for i in range(0, len(files1)):
-        combi.append(mergeCSV(files1[i], files2[i]))
+        try:
+            combi.append(mergeCSV(files1[i], files2[i]))
+        except FileNotFoundError:
+            print("Error: file " + files1[i] + " or " + files2[i] + " doesn't exist !!")
     return combi
         
 
@@ -86,6 +89,7 @@ def main(args):
 
     #import pudb; pudb.set_trace()
 
+    allProjectsPath = ["projects/" + args.project_path + "/" + x for x in os.listdir("projects/" + args.project_path) if os.path.isdir("projects/" + args.project_path + "/" + x)]
     # Concat all csv files
     sppStatTest = [f +"/reports/sppComputation/testStats.csv" for f in allProjectsPath]
     trainStatTest = [f +"/reports/training/testStats.csv" for f in allProjectsPath]

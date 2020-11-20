@@ -395,7 +395,7 @@ def main(args):
             print(TEST_COLOR + 'Test       -> loss: %1.4f,  acc pt: %3.2f%%,  acc spp: %3.2f%%,  avgIoU: %3.2f%%' % (loss_test*100, acc_pt_test*100, acc_spp_test*100, avg_iou_test*100) + CLOSE)
 
         # 4. Check if isBest
-        if avg_iou_val > best_iou:
+        if avg_iou_val > best_iou or epoch < 5:
             print(BEST_COLOR + 'New best model achieved!' + CLOSE)
             best_iou = avg_iou_val
             isBest = True
@@ -406,6 +406,8 @@ def main(args):
         if not isBest and not args.not_only_best:
             args.resume = pathManager.modelFile 
             model, optimizer = resume(args, dbinfo, pathManager.modelFile)
+            #args.start_epoch += 1
+            #epoch += 1
         
         # 6. Write the csv stat file
 
@@ -415,18 +417,18 @@ def main(args):
         def rename(l, name):
             return [name + i for i in l]
 
+        reportPath = pathManager.getTrainingCsvReport("validation")
         if isBest:
             header = ["epoch", "acc_pt", "acc_spp", "loss", "avg_iou", "avg_prec", "avg_rec"] + rename(classNames, "avg_iou_val_") + rename(classNames, "avg_prec_val_") + rename(classNames, "avg_rec_val_") 
             data = np.concatenate([[int(epoch), acc_pt_val, acc_spp_val, loss_val, avg_iou_val, avg_prec_val, avg_rec_val], iou_per_class_val, prec_per_class_val, rec_per_class_val])
-            reportPath = pathManager.getTrainingCsvReport("validation")
             io.writeCsv(reportPath, header, data)
         else:
             io.duplicateLastLineCsv(reportPath)
 
+        reportPath = pathManager.getTrainingCsvReport("test")
         if firstEpoch or (epoch % args.test_nth_epoch == 0): 
             header = ["epoch", "acc_pt", "acc_spp", "loss", "avg_iou", "avg_prec", "avg_rec"] + rename(classNames, "avg_iou_test_") + rename(classNames, "avg_prec_test_") + rename(classNames, "avg_rec_test_")
             data = np.concatenate([[int(epoch), acc_pt_test, acc_spp_test, loss_test, avg_iou_test, avg_prec_test, avg_rec_test], iou_per_class_test, prec_per_class_test, rec_per_class_test])
-            reportPath = pathManager.getTrainingCsvReport("test")
             io.writeCsv(reportPath, header, data)
         else:
             io.duplicateLastLineCsv(reportPath)

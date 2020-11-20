@@ -152,6 +152,7 @@ def main(args):
     colors = ColorLabelManager()
     n_labels = colors.nbColor
     pathManager = PathManager(args.ROOT_PATH)
+    pathManager.voxelWidth = str(args.voxel_width)
     pathManager.createDirForSppComputation()
     
     reportManager = ReportManager(args, n_labels+1)
