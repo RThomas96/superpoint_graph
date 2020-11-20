@@ -1,7 +1,6 @@
 *.pyc
 *DS_Store*
 *.vscode
-*.so
 .mypy_cache
 vKITTI3D.md
 tags
