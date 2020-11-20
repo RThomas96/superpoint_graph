@@ -34,42 +34,35 @@ class StatManagerOnSPP:
         return self.CM.getAccuracy()
 
     def getAccuracyPerClass(self): 
-        return self.CM.getAccuracyPerClass()
+        return self.CM.getIoUPerClass()
 
 class SPPComputationReportManager:
     def __init__(self, args, nbLabels):
-        " Indicate if next values added to the class will be from from training data "
-        self.train = True
-
         " Parameters "
         self.regStrength = args.reg_strength 
         self.knnGeo = args.knn_geofeatures 
         self.knnAdj = args.knn_adj
         self.lambdaWeight = args.lambda_edge_weight
 
-        self.stats = [StatManagerOnSPP(nbLabels), StatManagerOnSPP(nbLabels)]
+        self.stats = {"test" : StatManagerOnSPP(nbLabels), "train" : StatManagerOnSPP(nbLabels), "validation" : StatManagerOnSPP(nbLabels)}
 
-    def computeStatOnSpp(self, nbPtPerLabelForEachSpp):
+    def computeStatOnSpp(self, nbPtPerLabelForEachSpp, dataset):
         for predicted in nbPtPerLabelForEachSpp:
             groundTruth = predicted.argmax()
-            self.stats[0 if self.train else 1].addBatchPrediction(predicted, groundTruth)
+            self.stats[dataset].addBatchPrediction(predicted, groundTruth)
 
-    def getNamedDict(self, values):
+    def getNamedDict(self, values, name=""):
         colorLabelManager = ColorLabelManager()
         label2Name = colorLabelManager.label2Name
         renamedDict = {} 
         for i, val in enumerate(values):
             if not math.isnan(val):
-                renamedDict[label2Name[i]] = val
+                renamedDict[name + label2Name[i]] = val
         return renamedDict
 
     def getCsvReport(self, dataset):
-        if dataset == "train":
-            self.train = True
-        else:
-            self.train = False
 
-        stat = self.stats[0 if self.train else 1]
+        stat = self.stats[dataset]
 
         header = list()
         header.append("Regularization strength")
@@ -78,11 +71,11 @@ class SPPComputationReportManager:
         header.append("Knn adjacency graph")
         header.append("Total number of points")
         header.append("Total accuracy")
-        for name in list(self.getNamedDict(stat.getAccuracyPerClass()).keys()):
+        for name in list(self.getNamedDict(stat.getAccuracyPerClass(), "avg_iou_spp_").keys()):
             header.append(name)
         header.append("Number of superpoints")
         header.append("Avg number of points per superpoint")
-        for name in list(self.getNamedDict(stat.nbSppPerClass).keys()):
+        for name in list(self.getNamedDict(stat.nbSppPerClass, "nb_spp_").keys()):
             header.append(name)
 
         value = list()
@@ -100,35 +93,35 @@ class SPPComputationReportManager:
         return [header, value]
 
 
-    def getFormattedReport(self):
-        report = ""
-        report += "# Superpoint computation report\n"
-        report += datetime.now().strftime("%Y-%m-%d %H:%M:%S") + "\n"
-        report += "\n"
-        report += "First value is training data, second one is testing\n"
-        report += "\n"
-        report += "## Parameters\n"
-        report += "\n"
-        report += "Regularization strength: {}\n".format(self.regStrength)
-        report += "Lambda edge weight: {}\n".format(self.lambdaWeight)
-        report += "Knn geometric features: {}\n".format(self.knnGeo)
-        report += "Knn adjacency graph: {}\n".format(self.knnAdj)
-        report += "\n"
-        report += "## General analysis\n"
-        report += "\n"
-        report += "Number of points: {} \n".format([self.stats[0].getNbPt(), self.stats[1].getNbPt()])
-        report += "Total accuracy : {} \n".format([self.stats[0].getTotalAccuracy(), self.stats[1].getTotalAccuracy()])
-        report += "Accuracy per class:\n"
-        report += "Training: {} \n".format(self.getNamedDict(self.stats[0].getAccuracyPerClass()))
-        report += "Testing: {} \n".format(self.getNamedDict(self.stats[1].getAccuracyPerClass()))
-        report += "\n"
-        report += "## Superpoints analysis\n"
-        report += "\n"
-        report += "Number of superpoints: {} \n".format([self.stats[0].getNbSpp(), self.stats[1].getNbSpp()])
-        report += "Average number of points per superpoints: {} \n".format([self.stats[0].getAvgNbOfPtPerSpp(), self.stats[1].getAvgNbOfPtPerSpp()])
-        report += "\n"
-        report += "Number of superpoint per class:\n"
-        report += "Training: {} \n".format(self.getNamedDict(self.stats[0].nbSppPerClass))
-        report += "Testing: {} \n".format(self.getNamedDict(self.stats[1].nbSppPerClass))
+    #def getFormattedReport(self):
+    #    report = ""
+    #    report += "# Superpoint computation report\n"
+    #    report += datetime.now().strftime("%Y-%m-%d %H:%M:%S") + "\n"
+    #    report += "\n"
+    #    report += "First value is training data, second one is testing\n"
+    #    report += "\n"
+    #    report += "## Parameters\n"
+    #    report += "\n"
+    #    report += "Regularization strength: {}\n".format(self.regStrength)
+    #    report += "Lambda edge weight: {}\n".format(self.lambdaWeight)
+    #    report += "Knn geometric features: {}\n".format(self.knnGeo)
+    #    report += "Knn adjacency graph: {}\n".format(self.knnAdj)
+    #    report += "\n"
+    #    report += "## General analysis\n"
+    #    report += "\n"
+    #    report += "Number of points: {} \n".format([self.stats[0].getNbPt(), self.stats[1].getNbPt()])
+    #    report += "Total accuracy : {} \n".format([self.stats[0].getTotalAccuracy(), self.stats[1].getTotalAccuracy()])
+    #    report += "Accuracy per class:\n"
+    #    report += "Training: {} \n".format(self.getNamedDict(self.stats[0].getAccuracyPerClass()))
+    #    report += "Testing: {} \n".format(self.getNamedDict(self.stats[1].getAccuracyPerClass()))
+    #    report += "\n"
+    #    report += "## Superpoints analysis\n"
+    #    report += "\n"
+    #    report += "Number of superpoints: {} \n".format([self.stats[0].getNbSpp(), self.stats[1].getNbSpp()])
+    #    report += "Average number of points per superpoints: {} \n".format([self.stats[0].getAvgNbOfPtPerSpp(), self.stats[1].getAvgNbOfPtPerSpp()])
+    #    report += "\n"
+    #    report += "Number of superpoint per class:\n"
+    #    report += "Training: {} \n".format(self.getNamedDict(self.stats[0].nbSppPerClass))
+    #    report += "Testing: {} \n".format(self.getNamedDict(self.stats[1].nbSppPerClass))
 
-        return report
+    #    return report

@@ -408,28 +408,34 @@ def main(args):
             model, optimizer = resume(args, dbinfo, pathManager.modelFile)
         
         # 6. Write the csv stat file
-        # WARNING: All stats are on POINTS and not on SPP
 
         # Validation
-        header = ["epoch", "acc_pt", "acc_spp", "loss", "avg_iou", "avg_prec", "avg_rec"] + list(ColorLabelManager().label2Name.values())[1:] + list(ColorLabelManager().label2Name.values())[1:] + list(ColorLabelManager().label2Name.values())[1:]
-        data = np.concatenate([[int(epoch), acc_pt_val, acc_spp_val, loss_val, avg_iou_val, avg_prec_val, avg_rec_val], iou_per_class_val, prec_per_class_val, rec_per_class_val])
+        classNames = list(ColorLabelManager().label2Name.values())[1:] # Without "unknown"
+
+        def rename(l, name):
+            return [name + i for i in l]
+
         if isBest:
-            io.writeCsv(pathManager.validationCsv, header, data)
+            header = ["epoch", "acc_pt", "acc_spp", "loss", "avg_iou", "avg_prec", "avg_rec"] + rename(classNames, "avg_iou_val_") + rename(classNames, "avg_prec_val_") + rename(classNames, "avg_rec_val_") 
+            data = np.concatenate([[int(epoch), acc_pt_val, acc_spp_val, loss_val, avg_iou_val, avg_prec_val, avg_rec_val], iou_per_class_val, prec_per_class_val, rec_per_class_val])
+            reportPath = pathManager.getTrainingCsvReport("validation")
+            io.writeCsv(reportPath, header, data)
         else:
-            io.duplicateLastLineCsv(pathManager.validationCsv)
+            io.duplicateLastLineCsv(reportPath)
 
         if firstEpoch or (epoch % args.test_nth_epoch == 0): 
-            header = ["epoch", "acc_pt", "acc_spp", "loss", "avg_iou", "avg_prec", "avg_rec"] + list(ColorLabelManager().label2Name.values())[1:] + list(ColorLabelManager().label2Name.values())[1:] + list(ColorLabelManager().label2Name.values())[1:]
+            header = ["epoch", "acc_pt", "acc_spp", "loss", "avg_iou", "avg_prec", "avg_rec"] + rename(classNames, "avg_iou_test_") + rename(classNames, "avg_prec_test_") + rename(classNames, "avg_rec_test_")
             data = np.concatenate([[int(epoch), acc_pt_test, acc_spp_test, loss_test, avg_iou_test, avg_prec_test, avg_rec_test], iou_per_class_test, prec_per_class_test, rec_per_class_test])
-            io.writeCsv(pathManager.testCsv, header, data)
+            reportPath = pathManager.getTrainingCsvReport("test")
+            io.writeCsv(reportPath, header, data)
         else:
-            io.duplicateLastLineCsv(pathManager.testCsv)
+            io.duplicateLastLineCsv(reportPath)
 
         # 7. Save the model
-        if firstEpoch or (isBest and not args.not_only_best) or (epoch % args.save_nth_epoch == 0):
+        if (firstEpoch and args.not_only_best) or (isBest and not args.not_only_best) or (epoch % args.save_nth_epoch == 0):
             torch.save({'epoch': epoch + 1, 'args': args, 'state_dict': model.state_dict(), 'optimizer' : optimizer.state_dict(), 'scaler': scaler}, pathManager.modelFile)
 
-    # 7. Final evaluation
+    # 8. Final evaluation
     if args.test_multisamp_n>0 and 'test' in args.db_test_name:
         acc_test, oacc_test, avg_iou_test, per_class_iou_test, predictions_test, avg_acc_test, confusion_matrix = eval_final()
         with h5py.File(pathManager.predictionFile, 'w') as hf:
@@ -503,22 +509,3 @@ def meter_value(meter):
 
 if __name__ == "__main__": 
     main(sys.argv[1:])
-
-# LOOG
-        #if args.use_val_set:
-        #    acc_val, loss_val, oacc_val, avg_iou_val, avg_acc_val = eval(True)
-        #    print(VAL_COLOR + '-> Val Loss: %1.4f  Val accuracy: %3.2f%%  Val oAcc: %3.2f%%  Val IoU: %3.2f%%  best ioU: %3.2f%%' % \
-        #         (loss_val, acc_val, 100*oacc_val, 100*avg_iou_val,100*max(best_iou,avg_iou_val)) + TRAIN_COLOR)
-        #    if avg_iou_val>best_iou: #best score yet on the validation set
-        #        print(BEST_COLOR + '-> New best model achieved!' + TRAIN_COLOR)
-        #        best_iou = avg_iou_val
-        #        new_best_model = True
-        #        torch.save({'epoch': epoch + 1, 'args': args, 'state_dict': model.state_dict(), 'optimizer' : optimizer.state_dict(), 'scaler': scaler},
-        #               os.path.join(modelDir, 'model.pth.tar'))
-        #elif epoch % args.save_nth_epoch == 0 or epoch==args.epochs-1:
-        #        torch.save({'epoch': epoch + 1, 'args': args, 'state_dict': model.state_dict(), 'optimizer' : optimizer.state_dict(), 'scaler': scaler},
-        #               os.path.join(modelDir, 'model.pth.tar'))
-        #test every test_nth_epochs
-        #or test after each enw model (but skip the first 5 for efficiency)
-
-        # TO DECOMMENT

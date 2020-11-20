@@ -166,6 +166,7 @@ def main(args):
     
     for dataset in pathManager.dataset:
         print("=================\n   "+dataset+"\n=================")
+        reportManager = ReportManager(args, n_labels+1)
     
         # Refresh timestamp
         if args.save and args.timestamp:
@@ -288,14 +289,12 @@ def main(args):
             f.close()
             timer.reset()
 
-            isTrainDataset = (dataset == "train")
-            reportManager.train = isTrainDataset 
-            reportManager.computeStatOnSpp(graph_sp["sp_labels"])
+            reportManager.computeStatOnSpp(graph_sp["sp_labels"], dataset)
     
         csvReport = reportManager.getCsvReport(dataset)
         io.writeCsv(pathManager.getSppCompCsvReport(dataset), csvReport[0], csvReport[1])
 
-    pathManager.saveGeneralReport(reportManager.getFormattedReport())
+    #pathManager.saveGeneralReport(reportManager.getFormattedReport())
 
 if __name__ == "__main__":
     main(sys.argv[1:])

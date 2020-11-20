@@ -22,12 +22,6 @@ class PathManager :
         self.generalReport = self.localReportPath + "/generalReport.report"
         self.timeReport= self.localReportPath + "/sppComputationBenchmark.report"
 
-        self.sppCompTrainingCsv = self.sppCompReportPath + "/statsTraining.csv"
-        self.sppCompTestingCsv = self.sppCompReportPath + "/statsTesting.csv"
-
-        self.validationCsv = self.trainingReportPath + "/statsValidation.csv"
-        self.testCsv = self.trainingReportPath + "/statsTest.csv"
-
         # Result hierarchy
         self.predictionFile = self.rootPath + "/results/predictions.h5"
         self.modelFile = self.rootPath + "/results/model.pth.h5"
@@ -113,8 +107,7 @@ class PathManager :
         file.close()
 
     def getSppCompCsvReport(self, dataset):
-        if dataset == "test":
-            return self.sppCompTestingCsv
-        else:
-            return self.sppCompTrainingCsv
+        return self.sppCompReportPath + "/" + dataset + "Stats.csv"
 
+    def getTrainingCsvReport(self, dataset):
+        return self.trainingReportPath + "/" + dataset + "Stats.csv"

@@ -4,6 +4,7 @@ import h5py
 from plyfile import PlyData, PlyElement # Ply I/O
 import pdal # Laz I/O
 import csv
+import pandas as pd
 
 #------------------------------------------------------------------------------
 def reduceDensity(inFile, outFile, voxel_width, regular_density = True):

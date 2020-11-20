@@ -102,9 +102,6 @@ class ConfusionMatrix:
         nb_class_seen = len(self.getUsedClass()) 
         return (sum(values) / nb_class_seen)
 
-    def getAccuracyPerClass(self):
-        return self.getIoUPerClass()
-
     def getStats(self):
         return self.getAccuracy(), self.getAvgIoU(), self.getAvgPrecision(), self.getAvgRecall(), self.getIoUPerClass(), self.getPrecisionPerClass(), self.getRecallPerClass()
 
