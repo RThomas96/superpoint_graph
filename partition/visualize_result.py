@@ -45,6 +45,7 @@ def main(args):
     parser.add_argument('--outType', default='p', help='which cloud to output: s = superpoints, p = predictions, t = transitions (only for supervized partitions), g = geof, d = geof std')
     parser.add_argument('--filter_label', help='Output only SPP with a specific label')
     parser.add_argument('--log', help='Files are read from log directory, you can set some REG_STRENGTH value to choose which file to choose')
+    parser.add_argument('--format', default="laz", type=str, help='Format in which all clouds will be saved')
 
     args = parser.parse_args(args)
     
@@ -54,7 +55,7 @@ def main(args):
     outGeof = 'g' in args.outType
     outStd = 'd' in args.outType
     
-    pathManager = PathManager(args.ROOT_PATH)
+    pathManager = PathManager(args.ROOT_PATH, args.format)
     
     #if args.log is not None:
     #    folder = os.path.split(args.file_path)[0] + '/log/'

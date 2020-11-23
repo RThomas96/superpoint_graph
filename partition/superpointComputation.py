@@ -5,7 +5,6 @@
     Script for partioning into simples shapes and prepare data
 """
 
-import pdal
 import pandas
 import random
 import os.path
@@ -141,6 +140,8 @@ def main(args):
     parser.add_argument('--keep_features', action='store_true', help='If set, do not recompute feature file')
     parser.add_argument('--voxelize', action='store_true', help='Choose to perform voxelization step or not')
     parser.add_argument('--keep_density', action='store_true', help='Voxelize cloud and keep original density')
+
+    parser.add_argument('--format', default="laz", type=str, help='Format in which all clouds will be saved')
     
     args = parser.parse_args(args)
     
@@ -151,7 +152,7 @@ def main(args):
 
     colors = ColorLabelManager()
     n_labels = colors.nbColor
-    pathManager = PathManager(args.ROOT_PATH)
+    pathManager = PathManager(args.ROOT_PATH, args.format)
     pathManager.voxelWidth = str(args.voxel_width)
     pathManager.createDirForSppComputation()
     
@@ -206,6 +207,7 @@ def main(args):
     
                         print(tab + "Save reduced density")
                     dataFile = voxelisedFile
+                    dataType = args.format
                 else:
                     print("Voxelisation step skipped")
                     print("Read data file")

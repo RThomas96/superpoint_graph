@@ -2,13 +2,16 @@ import os
 import numpy as np
 import h5py
 from plyfile import PlyData, PlyElement # Ply I/O
-import pdal # Laz I/O
 import csv
 import pandas as pd
+
 
 #------------------------------------------------------------------------------
 def reduceDensity(inFile, outFile, voxel_width, regular_density = True):
 
+    filename, extension = os.path.splitext(outFile)
+    if extension == ".laz":
+        extension = ".las"# Las and laz writer are the same
     filter=""
     if regular_density:
         filter= """
@@ -32,16 +35,29 @@ def reduceDensity(inFile, outFile, voxel_width, regular_density = True):
     
     json += filter
     
-    json += """
-        {
-            "type":"writers.las",
-            "filename":"%s",
-            "forward":"all"
-        }
-    ]
-    """ % (outFile)
+    if extension == ".las":
+        json += """
+            {
+                "type":"writers%s",
+                "filename":"%s",
+                "forward":"all"
+            }
+        ]
+        """ % (extension, outFile)
+    else:
+        json += """
+            {
+                "type":"writers%s",
+                "filename":"%s",
+                "precision" : "7"
+            }
+        ]
+        """ % (extension, outFile)
+    import pdal # Laz I/O
     pipeline = pdal.Pipeline(json)
     count = pipeline.execute()
+    
+    #"dims": ["x=float64", "y=float64", "z=float64", "Red=uint16_t", "Green=uint16_t", "Blue=uint16_t", "classification=uint16_t"],
 
 #------------------------------------------------------------------------------
 def read_file(filename, extension):
@@ -55,7 +71,7 @@ def read_ply(filename):
     """convert from a ply file. include the label and the object number"""
     #---read the ply file--------
     plydata = PlyData.read(filename)
-    xyz = np.stack([plydata['vertex'][n] for n in['x', 'y', 'z']], axis=1)
+    xyz = np.stack([plydata['vertex'][n] for n in['x', 'y', 'z']], axis=1).astype(np.float32)
     try:
         rgb = np.stack([plydata['vertex'][n]
                         for n in ['red', 'green', 'blue']]
@@ -67,9 +83,8 @@ def read_ply(filename):
     if np.max(rgb) > 1:
         rgb = rgb
     try:
-        object_indices = plydata['vertex']['object_index']
-        labels = plydata['vertex']['label']
-        return xyz, rgb, labels, object_indices
+        labels = plydata['vertex']['classification'].astype(np.uint32)
+        return xyz, rgb, labels, []
     except ValueError:
         try:
             labels = plydata['vertex']['label']
@@ -90,6 +105,7 @@ def read_laz(filename):
     ]
     """ % (filename)
 
+    import pdal # Laz I/O
     pipeline = pdal.Pipeline(json)
     count = pipeline.execute()
     arrays = np.array(pipeline.arrays)
@@ -202,6 +218,7 @@ def write_laz_labels(filename, xyz, rgb, labels):
       ]
     }""" % (filename)
     
+    import pdal # Laz I/O
     p = pdal.Pipeline(output, [vertex_all])
     count = p.execute()
 
@@ -235,6 +252,7 @@ def write_laz_simple(filename, xyz, rgb):
       ]
     }""" % (filename)
     
+    import pdal # Laz I/O
     p = pdal.Pipeline(output, [vertex_all])
     count = p.execute()
 

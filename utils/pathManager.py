@@ -8,10 +8,12 @@ def mkdirIfNotExist(dir):
         os.mkdir(dir)
 
 class PathManager : 
-    def __init__(self, projectName):
+    def __init__(self, projectName, format = "laz"):
         self.rootPath = os.path.dirname(os.path.realpath(__file__)) + '/../projects/' + projectName 
         if not os.path.isdir(self.rootPath):
             raise NameError('The root subfolder you indicate doesn\'t exist')
+
+        self.outFormat = format
 
         # Report hierarchy
         self.reportPath = self.rootPath + "/reports"
@@ -70,7 +72,7 @@ class PathManager :
         spgFile  = self.rootPath + "/superpoint_graphs/" + dataset + "/" + fileName + ".h5" 
         parseFile  = self.rootPath + "/parsed/" + dataset + "/" + fileName + ".h5"
     
-        voxelisedFile  = self.rootPath + "/data/" + dataset + "-voxelised/" + fileName + '-' + self.voxelWidth + '.' + dataType
+        voxelisedFile  = self.rootPath + "/data/" + dataset + "-voxelised/" + fileName + '-' + self.voxelWidth + '.' + self.outFormat
         #voxelisedFile  = self.rootPath + "/data/voxelised/" + dataset + "/" + fileName + "/" + fileName + "-prunned" + str(args.voxel_width).replace(".", "-") + "." + dataType
         return fileName, dataFile, dataType, voxelisedFile, featureFile, spgFile, parseFile
 
@@ -81,11 +83,11 @@ class PathManager :
         fileName = self.allDataFileName[dataset][i]
         #dataType = self.allDataFileType[dataset][i]
     
-        sppFile   = self.rootPath + "/visualisation/superpoints/" + fileName + "_spp.laz"
-        predictionFile   = self.rootPath + "/visualisation/predictions/" + fileName + "_pred.laz"
-        transFile   = self.rootPath + "/visualisation/features/" + fileName + "_trans.laz"
-        geofFile   = self.rootPath + "/visualisation/features/" + fileName + "_geof.laz"
-        stdFile   = self.rootPath + "/visualisation/features/" + fileName  + "_std.laz"
+        sppFile   = self.rootPath + "/visualisation/superpoints/" + fileName + "_spp." + self.outFormat
+        predictionFile   = self.rootPath + "/visualisation/predictions/" + fileName + "_pred." + self.outFormat
+        transFile   = self.rootPath + "/visualisation/features/" + fileName + "_trans." + self.outFormat
+        geofFile   = self.rootPath + "/visualisation/features/" + fileName + "_geof." + self.outFormat
+        stdFile   = self.rootPath + "/visualisation/features/" + fileName  + "_std." + self.outFormat
 
         return sppFile, predictionFile, transFile, geofFile, stdFile 
 

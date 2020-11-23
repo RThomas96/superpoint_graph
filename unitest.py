@@ -26,7 +26,7 @@ if not args.keep:
     print("")
 
 #superpointComputation(["test2", "--voxelize", "--voxel_width", "0.05"])
-superpointComputation(["test2", "--voxelize", "--voxel_width", "0.1"])
+superpointComputation(["test2", "--voxelize", "--voxel_width", "0.03"])
 
 train(["test2", "--epoch", "10"])
 
