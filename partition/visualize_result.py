@@ -35,6 +35,16 @@ def openPredictions(res_file, h5FolderPath, components, xyz):
     except OSError:
         raise ValueError("%s does not exist in %s" % (h5FolderPath, res_file))
 
+def openRawPredictions(res_file, h5FolderPath):
+    try:
+        h5FileFolders = list(h5py.File(res_file, 'r').keys())
+        if not os.path.split(h5FolderPath)[0] in h5FileFolders:
+            print("%s does not exist in %s" % (h5FolderPath, res_file))
+            raise ValueError("%s does not exist in %s" % (h5FolderPath, res_file))
+        return np.array(h5py.File(res_file, 'r').get(h5FolderPath))        
+    except OSError:
+        raise ValueError("%s does not exist in %s" % (h5FolderPath, res_file))
+
 def main(args):
     parser = argparse.ArgumentParser(description='Generate ply file from prediction file')
     parser.add_argument('ROOT_PATH', help='Folder name which contains data')
@@ -42,7 +52,7 @@ def main(args):
     parser.add_argument('fileName', help='Full path of file to display, from data folder, must be "test/X"')
     parser.add_argument('-ow', '--overwrite', action='store_true', help='Wether to read existing files or overwrite them')
     parser.add_argument('--supervized', action='store_true', help='Wether to read existing files or overwrite them')
-    parser.add_argument('--outType', default='p', help='which cloud to output: s = superpoints, p = predictions, t = transitions (only for supervized partitions), g = geof, d = geof std')
+    parser.add_argument('--outType', default='p', help='which cloud to output: s = superpoints, p = predictions, t = transitions (only for supervized partitions), g = geof, d = geof std, c = confidence')
     parser.add_argument('--filter_label', help='Output only SPP with a specific label')
     parser.add_argument('--log', help='Files are read from log directory, you can set some REG_STRENGTH value to choose which file to choose')
     parser.add_argument('--format', default="laz", type=str, help='Format in which all clouds will be saved')
@@ -51,6 +61,7 @@ def main(args):
     
     outSuperpoints = 's' in args.outType
     outPredictions = 'p' in args.outType
+    outRawPredictions = 'c' in args.outType
     outTransitions = 't' in args.outType
     outGeof = 'g' in args.outType
     outStd = 'd' in args.outType
@@ -67,7 +78,7 @@ def main(args):
     fileName, dataFile, dataType, voxelisedFile, featureFile, spgFile, parseFile = pathManager.getFilesFromDataset(args.dataset, args.fileName)
     res_file = pathManager.predictionFile 
     
-    sppFile, predictionFile, transFile, geofFile, stdFile = pathManager.getVisualisationFilesFromDataset(args.dataset, args.fileName)
+    sppFile, predictionFile, transFile, geofFile, stdFile, confPredictionFile = pathManager.getVisualisationFilesFromDataset(args.dataset, args.fileName)
     
     #if args.supervized:
     #    xyz, rgb, edg_source, edg_target, is_transition, local_geometry, labels, objects, elevation, xyn = graph.read_structure(supervized_fea_file, False)
@@ -91,6 +102,10 @@ def main(args):
             visu.writePrediction(predictionFile, xyz, pred_full)
         except ValueError:
             print("Can't visualize predictions")
+
+    if outRawPredictions:
+            pred_raw = openRawPredictions(pathManager.rawPredictionFile, args.dataset + "/" + fileName)
+            visu.writeRawPrediction(confPredictionFile, xyz, pred_raw, components)
     
     if outSuperpoints and args.filter_label is not None:
         print("Filter activated")

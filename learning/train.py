@@ -305,6 +305,7 @@ def main(args):
         acc_meter = tnt.meter.ClassErrorMeter(accuracy=True)
         confusion_matrix = metrics.ConfusionMatrix(dbinfo['classes'])
         collected, predictions = defaultdict(list), {}
+        rawPredictions = {}
 
         # collect predictions over multiple sampling seeds
         for ss in range(args.test_multisamp_n):
@@ -325,7 +326,7 @@ def main(args):
 
         # aggregate predictions (mean)
         for fname, lst in collected.items():
-            # o_cpu    = PREDICTIONS
+            # o_cpu    = PREDICTIONS with probability
             # tvec_cpu = ground truth
             o_cpu, t_cpu, tvec_cpu = list(zip(*lst))
             if args.test_multisamp_n > 1:
@@ -334,6 +335,7 @@ def main(args):
                 o_cpu = o_cpu[0]
             t_cpu, tvec_cpu = t_cpu[0], tvec_cpu[0]
             predictions[fname] = np.argmax(o_cpu,1)
+            rawPredictions[fname] = o_cpu
             o_cpu, t_cpu, tvec_cpu = filter_valid(o_cpu, t_cpu, tvec_cpu)
             if t_cpu.size > 0:
                 acc_meter.add(o_cpu, t_cpu)
@@ -347,7 +349,7 @@ def main(args):
             except IndexError:
                 print("Missing one label in data: " + name)
 
-        return meter_value(acc_meter), confusion_matrix.get_overall_accuracy(), confusion_matrix.get_average_intersection_union(), per_class_iou, predictions,  confusion_matrix.get_mean_class_accuracy(), confusion_matrix.confusion_matrix
+        return meter_value(acc_meter), confusion_matrix.get_overall_accuracy(), confusion_matrix.get_average_intersection_union(), per_class_iou, predictions,  confusion_matrix.get_mean_class_accuracy(), confusion_matrix.confusion_matrix, rawPredictions
 
     ############
     # Training loop
@@ -439,9 +441,13 @@ def main(args):
 
     # 8. Final evaluation
     if args.test_multisamp_n>0 and 'test' in args.db_test_name:
-        acc_test, oacc_test, avg_iou_test, per_class_iou_test, predictions_test, avg_acc_test, confusion_matrix = eval_final()
+        acc_test, oacc_test, avg_iou_test, per_class_iou_test, predictions_test, avg_acc_test, confusion_matrix, rawPredictions = eval_final()
         with h5py.File(pathManager.predictionFile, 'w') as hf:
             for fname, o_cpu in predictions_test.items():
+                hf.create_dataset(name=fname, data=o_cpu) #(0-based classes)
+
+        with h5py.File(pathManager.rawPredictionFile, 'w') as hf:
+            for fname, o_cpu in rawPredictions.items():
                 hf.create_dataset(name=fname, data=o_cpu) #(0-based classes)
 
         print('-> Multisample {}: Test accuracy: {}, \tTest oAcc: {}, \tTest avgIoU: {}, \tTest mAcc: {}'.format(args.test_multisamp_n, acc_test, oacc_test, avg_iou_test, avg_acc_test))

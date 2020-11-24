@@ -26,6 +26,7 @@ class PathManager :
 
         # Result hierarchy
         self.predictionFile = self.rootPath + "/results/predictions.h5"
+        self.rawPredictionFile = self.rootPath + "/results/rawPredictions.h5"
         self.modelFile = self.rootPath + "/results/model.pth.h5"
 
         # Datasets hierarchy
@@ -88,8 +89,9 @@ class PathManager :
         transFile   = self.rootPath + "/visualisation/features/" + fileName + "_trans." + self.outFormat
         geofFile   = self.rootPath + "/visualisation/features/" + fileName + "_geof." + self.outFormat
         stdFile   = self.rootPath + "/visualisation/features/" + fileName  + "_std." + self.outFormat
+        confidencePredictionFile   = self.rootPath + "/visualisation/predictions/" + fileName  + "_conf." + self.outFormat
 
-        return sppFile, predictionFile, transFile, geofFile, stdFile 
+        return sppFile, predictionFile, transFile, geofFile, stdFile, confidencePredictionFile
 
     def getNbFiles(self, dataset):
         return len(self.allDataFileName[dataset])

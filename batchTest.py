@@ -80,9 +80,9 @@ def main(args):
             os.makedirs("projects/" + sppArgs.getProjectPath())
             os.symlink(args.data_path, "projects/" + sppArgs.getProjectPath() + "/data")
 
-            superpointComputation(sppArgs.toList() + ["--format", "ply"])
+            superpointComputation(sppArgs.toList() + ["--format", "laz"])
             train([sppArgs.getProjectPath(), "--epoch", "20"])
-            visualize([sppArgs.getProjectPath(), "test", "LPA3-1", "--outType", "sptgd", "--format", "ply"])
+            visualize([sppArgs.getProjectPath(), "test", "LPA3-1", "--outType", "spctgd", "--format", "laz"])
 
         except FileExistsError:
             print("This project already exist, pass")

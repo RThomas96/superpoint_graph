@@ -91,3 +91,18 @@ def reduced_labels2full(labels_red, components, n_ver):
     for i_com in range(0, len(components)):
         labels_full[components[i_com]] = labels_red[i_com]
     return labels_full
+#------------------------------------------------------------------------------
+def writeRawPrediction(filename, xyz, prediction, components, dataType="laz"):
+    """write a ply with colors for each class"""
+    import pudb; pudb.set_trace()
+    sorted = np.sort(prediction, axis=1)
+    sppColor = [1-x[-2]/x[-1] for x in sorted]
+    sppColor = np.array(sppColor) * 355
+    sppColor = [[0, x, 0] for x in sppColor]
+
+    ptColor = np.zeros([len(xyz), 3])
+    for i_com in range(0, len(components)):
+        ptColor[components[i_com]] = sppColor[i_com]
+
+    
+    io.write_file(filename, xyz, ptColor, dataType)
