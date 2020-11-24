@@ -2,8 +2,8 @@ import os
 
 class ColorLabelManager:
         def __init__(self):
-                #TODO
-                self.filePath = "/home/thomas/Data/Cajun/Data/Evaluation/Methods/superpoint_graph/utils/colorCode" 
+                #self.filePath = "/home/thomas/Data/Cajun/Data/Evaluation/Methods/superpoint_graph/utils/colorCode" 
+                self.filePath = os.path.dirname(os.path.realpath(__file__)) + '/../utils/colorCode'
                 self.label2Color, self.label2Name, self.aggregationDict = self.parseColorFile()
                 self.nbColor = len(self.aggregationDict)
                 self.needAggregation = True if max([len(x) for x in self.aggregationDict.values()]) > 1 else False
