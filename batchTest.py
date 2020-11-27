@@ -67,7 +67,8 @@ def main(args):
             "--reg_strength" : float(0.03),
             "--d_se_max" : 0,
             "--voxel_width" : float(0.03),
-            "--voxelize" : "none"
+            "--voxelize" : "none",
+            "--validationIsTest" : "none"
     }
 
     allProjectsPath = []

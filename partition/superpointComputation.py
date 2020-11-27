@@ -142,6 +142,7 @@ def main(args):
     parser.add_argument('--keep_density', action='store_true', help='Voxelize cloud and keep original density')
 
     parser.add_argument('--format', default="laz", type=str, help='Format in which all clouds will be saved')
+    parser.add_argument('--validationIsTest', action='store_true', help='If validation dataset is test dataset')
     
     args = parser.parse_args(args)
     
@@ -183,6 +184,15 @@ def main(args):
     
             print(str(i + 1) + " / " + str(len(pathManager.allDataFileName[dataset])) + " ---> "+fileName)
             tab="   "
+
+            if dataset == "validation" and args.validationIsTest:
+                allValidationFiles = pathManager.getFilesFromDataset("validation", i)
+                allTestFiles = pathManager.getFilesFromDataset("test", i)
+                import pudb; pudb.set_trace()
+                for x, file in enumerate(allTestFiles):
+                    if os.path.isfile(file) and not os.path.isfile(allValidationFiles[x]):
+                        os.symlink(allTestFiles[x], allValidationFiles[x])
+                break
     
             # Step 1: Features file computation
             if (os.path.isfile(featureFile) and not args.overwrite) or args.keep_features :
@@ -294,8 +304,14 @@ def main(args):
 
             reportManager.computeStatOnSpp(graph_sp["sp_labels"], dataset)
     
-        csvReport = reportManager.getCsvReport(dataset)
-        io.writeCsv(pathManager.getSppCompCsvReport(dataset), csvReport[0], csvReport[1])
+        csvPath = pathManager.getSppCompCsvReport(dataset)
+        if dataset == "validation" and args.validationIsTest:
+            csvTestPath = pathManager.getSppCompCsvReport("test")
+            if os.path.isfile(csvTestPath):
+                os.symlink(csvTestPath, csvPath)
+        else:
+            csvReport = reportManager.getCsvReport(dataset)
+            io.writeCsv(csvPath, csvReport[0], csvReport[1])
 
     #pathManager.saveGeneralReport(reportManager.getFormattedReport())
 
