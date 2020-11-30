@@ -52,18 +52,10 @@ class SPPComputationReportManager:
             groundTruth = predicted.argmax()
             self.stats[dataset].addBatchPrediction(predicted, groundTruth)
 
-    def getNamedDict(self, values, name=""):
-        colorLabelManager = ColorLabelManager()
-        label2Name = colorLabelManager.label2Name
-        renamedDict = {} 
-        for i, val in enumerate(values):
-            if not math.isnan(val):
-                renamedDict[name + label2Name[i]] = val
-        return renamedDict
-
     def getCsvReport(self, dataset):
 
         stat = self.stats[dataset]
+        label2Name = ColorLabelManager().label2Name
 
         header = list()
         header.append("Voxel width")
@@ -73,11 +65,11 @@ class SPPComputationReportManager:
         header.append("Knn adjacency graph")
         header.append("Total number of points")
         header.append("Total accuracy")
-        for name in list(self.getNamedDict(stat.getAccuracyPerClass(), "avg_iou_spp_").keys()):
+        for name in list(label2Name.values()):
             header.append(name)
         header.append("Number of superpoints")
         header.append("Avg number of points per superpoint")
-        for name in list(self.getNamedDict(stat.nbSppPerClass, "nb_spp_").keys()):
+        for name in list(label2Name.values()):
             header.append(name)
 
         value = list()
