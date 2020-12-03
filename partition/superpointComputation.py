@@ -33,6 +33,8 @@ import libcp
 import graphs
 import cloudIO as io
 
+import multiprocessing
+
 # Label check is different cause laz format always output labels
 def has_labels(labels, dataType):
     if dataType == "laz":
@@ -60,14 +62,22 @@ def parseCloudForPointNET(featureFile, graphFile, parseFile):
     #if isTrainFolder:
     #    e = xyz[:,2] / 4 - 0.5 # (4m rough guess)
     #else :
-    low_points = ((xyz[:,2]-xyz[:,2].min() < 0.5)).nonzero()[0]
+
+    # Pick all points above 0.5m up than the lower point
+    val = 0.5
+    low_points = ((xyz[:,2]-xyz[:,2].min() < val)).nonzero()[0]
+    while len(low_points) < 200:
+        val += 0.1
+        low_points = ((xyz[:,2]-xyz[:,2].min() < val)).nonzero()[0]
+        if val > 10000:
+            break
     try:
         reg = RANSACRegressor(random_state=0).fit(xyz[low_points,:2], xyz[low_points,2])
         e = xyz[:,2]-reg.predict(xyz[:,:2])
         e /= np.max(np.abs(e),axis=0)
         e *= 0.5
     except ValueError as error:
-        print ("ERROR ransac regressor: " + error) 
+        print ("ERROR ransac regressor" + error) 
         e = xyz[:,2] / 4 - 0.5 # (4m rough guess)
 
     # rescale to [-0.5,0.5]; keep xyz
@@ -123,6 +133,156 @@ def addRGBToFeature(features, rgb):
 def mkdirIfNotExist(dir):
     if not os.path.isdir(dir): os.mkdir(dir)
 
+def fullPipeline(dataset, i, args, pathManager):
+    colors = ColorLabelManager()
+    n_labels = colors.nbColor
+
+    timer = Timer(4)
+    timer.start(0)
+    fileName, dataFile, dataType, voxelisedFile, featureFile, spgFile, parseFile = pathManager.getFilesFromDataset(dataset, i)
+    #TODO: cause n_labels is reset
+    n_labels = colors.nbColor
+
+    print(str(i + 1) + " / " + str(len(pathManager.allDataFileName[dataset])) + " ---> "+fileName)
+    tab="   "
+
+    if not args.overwrite and os.path.isfile(featureFile) and os.path.isfile(spgFile) and os.path.isfile(parseFile):
+        print("Nothing to compute")
+        return
+
+    # Step 1: Features file computation
+    if (os.path.isfile(featureFile) and not args.overwrite) or args.keep_features :
+        print(tab + "Reading the existing feature file...")
+        try:
+            geof, xyz, rgb, graph_nn, labels = io.read_features(featureFile)
+        except:
+            print("Error: cannot load file " + featureFile)
+            return
+    else:
+        # Step 1.1: Voxelize the data file 
+        timer.start(1)
+        if args.voxelize:
+            print("Begin voxelisation step")
+            if os.path.isfile(voxelisedFile) and not args.overwrite: 
+                print("Voxelised file found, voxelisation step skipped")
+                print("Read voxelised file")
+            else:
+                print(tab + "Reduce point density")
+                mkdirIfNotExist(pathManager.rootPath + "/data/" + dataset + "-voxelised/")
+                if args.voxel_width > 0:
+                    io.reduceDensity(dataFile, voxelisedFile, args.voxel_width, False if args.keep_density else True)
+
+                print(tab + "Save reduced density")
+                if args.only_voxelize:
+                    return
+            dataFile = voxelisedFile
+            dataType = args.format
+        else:
+            print("Voxelisation step skipped")
+            print("Read data file")
+
+        xyz, rgb, labels, objects = io.read_file(dataFile, dataType)
+        if has_labels(labels, dataType):
+            print("Labels found")
+        else :
+            print("No labels found")
+            n_labels = 0
+            labels = np.array([])
+
+        if colors.needAggregation:
+            labels = np.array(colors.aggregateLabels(labels))
+        
+        timer.stop(1)
+        # Step 1.2: Compute nn graph
+        timer.start(2)
+        print(tab + "Compute both {}_nn and {}_nn graphs...".format(args.knn_adj, args.knn_geofeatures))
+        graph_nn, target_fea = graphs.compute_graph_nn_2(xyz, args.knn_adj, args.knn_geofeatures)
+
+        # Step 1.3: Compute geometric features
+        print(tab + "Compute geometric features...")
+        geof = libply_c.compute_geof(xyz, target_fea, args.knn_geofeatures).astype('float32')
+        del target_fea
+
+        # Step 1.4: Compute geometric features
+        io.write_features(featureFile, geof, xyz, rgb, graph_nn, labels)
+        timer.stop(2)
+
+    # Step 2: Compute superpoint graph
+    timer.start(3)
+    timerOptionnal = Timer(2)
+    sys.stdout.flush()
+    if os.path.isfile(spgFile) and not args.overwrite :
+        print(tab + "Reading the existing superpoint graph file...")
+        graph_sp, components, in_component = io.read_spg(spgFile)
+    else:
+        if args.save:
+            storePreviousFile(spgFile, timeStamp)
+        #--- build the spg h5 file --
+
+        # Add rgb to geometric feature to influence superpoint computation
+        features = addRGBToFeature(geof, rgb) 
+
+        # heuristic used by s3dis
+        # increase the importance of verticality (heuristic)
+        # geof[:,3] = 2. * geof[:, 3]                 
+
+        # Add an edge weight proportionnal to distance
+        # Weight= 1/dist+meanDist
+        graph_nn["edge_weight"] = np.array(1. / ( args.lambda_edge_weight + graph_nn["distances"] / np.mean(graph_nn["distances"])), dtype = 'float32')
+
+        timerOptionnal.start(0)
+        # Compute optimisation solution with cut pursuit
+        print(tab + "Resolve optimisation problem...")
+        components, in_component = libcp.cutpursuit(features, graph_nn["source"], graph_nn["target"], graph_nn["edge_weight"], args.reg_strength)
+        if np.array(in_component).sum() == 0:
+            print("Error: cutpursuit not working, probably due to many duplicate points")
+        components = np.array(components, dtype = 'object')
+        timerOptionnal.stop(0)
+
+
+        timerOptionnal.start(1)
+        print(tab + "Computation of the SPG...")
+        graph_sp = graphs.compute_sp_graph(xyz, args.d_se_max, in_component, components, labels, n_labels)
+        timerOptionnal.stop(1)
+
+        # Structure graph_sp
+        # "sp_labels" = nb of points per label
+        # Ex: [ 0, 0, 10, 2] --> 10 pt of label 2 and 2 pt of label 3
+
+        io.write_spg(spgFile, graph_sp, components, in_component)
+    
+    if os.path.isfile(parseFile) and not args.overwrite :
+        print(tab + "Reading the existing parsed file...")
+    else:
+        parseCloudForPointNET(featureFile, spgFile, parseFile)
+
+    timer.stop(3)
+    timer.stop(0)
+    formattedTimer = timer.getFormattedTimer(["Total", "Voxelisation", "Features", "Superpoint graph"])
+    print(formattedTimer)
+    timer.reset()
+
+    formattedTimer = timerOptionnal.getFormattedTimer(["Resolve optimisation", "SPG computation"])
+    print(formattedTimer)
+
+def duplicateTestFilesIntoValidation(pathManager):
+    for i in range(pathManager.getNbFiles("test")):
+        allValidationFiles = pathManager.getFilesFromDataset("validation", i)
+        allTestFiles = pathManager.getFilesFromDataset("test", i)
+        for x, file in enumerate(allTestFiles):
+            if os.path.isfile(file) and not os.path.isfile(allValidationFiles[x]):
+                os.symlink(allTestFiles[x], allValidationFiles[x])
+
+def duplicateTestReportIntoValidation(pathManager):
+    csvTestPath = pathManager.getSppCompCsvReport("test")
+    csvValPath = pathManager.getSppCompCsvReport("validation")
+    if os.path.isfile(csvTestPath):
+        if not os.path.isfile(csvValPath):
+            os.symlink(csvTestPath, csvValPath)
+    else:
+        print("File not found: " + csvTestPath)    
+        print("Can't copy validation csv file")    
+
 def main(args):
     parser = argparse.ArgumentParser(description='Superpoint computation programm')
     parser.add_argument('ROOT_PATH', help='name of the folder containing the data directory')
@@ -136,184 +296,72 @@ def main(args):
 
     parser.add_argument('-ow', '--overwrite', action='store_true', help='Wether to read existing files or overwrite them')
     parser.add_argument('--save', action='store_true', help='Wether to save old files before overwrite them')
-    parser.add_argument('--timestamp', action='store_true', help='Create a time stamp with time rather than parameters values')
     parser.add_argument('--keep_features', action='store_true', help='If set, do not recompute feature file')
     parser.add_argument('--voxelize', action='store_true', help='Choose to perform voxelization step or not')
+    parser.add_argument('--only_voxelize', action='store_true', help='Choose to perform voxelization step or not')
     parser.add_argument('--keep_density', action='store_true', help='Voxelize cloud and keep original density')
 
     parser.add_argument('--format', default="laz", type=str, help='Format in which all clouds will be saved')
-    parser.add_argument('--validationIsTest', action='store_true', help='If validation dataset is test dataset')
+    parser.add_argument('--validationIsTest', action='store_true', help='Choose if validation dataset is the same than test dataset')
+    parser.add_argument('--parallel', action='store_true', help='Choose if validation dataset is the same than test dataset')
     
     args = parser.parse_args(args)
     
     if(args.overwrite):
         print("Warning: files will be overwritten !!")
     
-    timer = Timer(4)
-
-    colors = ColorLabelManager()
-    n_labels = colors.nbColor
     pathManager = PathManager(args.ROOT_PATH, args.format)
     pathManager.voxelWidth = str(args.voxel_width)
     pathManager.createDirForSppComputation()
-    
-    reportManager = ReportManager(args, n_labels+1)
-    
-    # Init timestamp
-    if args.save:
-        if args.timestamp:
-            timeStamp = datetime.now().strftime("-%d-%m-%Y-%H:%M:%S")
-        else:
-            data = np.array(pandas.read_csv(reportManager.getCsvPath(), sep=';', header=None))
-            timeStamp="-".join(map(str, data[-1][0:5]))
-    
-    for dataset in pathManager.dataset:
-        print("=================\n   "+dataset+"\n=================")
-        reportManager = ReportManager(args, n_labels+1)
-    
-        # Refresh timestamp
-        if args.save and args.timestamp:
-            timeStamp = datetime.now().strftime("-%d-%m-%Y-%H:%M:%S")
 
-        for i in range(pathManager.getNbFiles(dataset)):
+    colors = ColorLabelManager()
+    n_labels = colors.nbColor
     
-            timer.start(0)
-            fileName, dataFile, dataType, voxelisedFile, featureFile, spgFile, parseFile = pathManager.getFilesFromDataset(dataset, i)
-            #TODO: cause n_labels is reset
-            n_labels = colors.nbColor
-    
-            print(str(i + 1) + " / " + str(len(pathManager.allDataFileName[dataset])) + " ---> "+fileName)
-            tab="   "
+    if args.parallel > 0:
+        print("Paralell computation activated")
+        with multiprocessing.Pool(multiprocessing.cpu_count()) as pool:    
+            proc = []
+            for dataset in pathManager.dataset:
+                if args.validationIsTest and dataset == "validation":
+                    continue
+                else:
+                    for i in range(pathManager.getNbFiles(dataset)):
+                        proc.append(pool.apply_async(fullPipeline, (dataset, i, args,pathManager,)))
+            for pr in proc:
+                pr.get()
 
             if dataset == "validation" and args.validationIsTest:
-                allValidationFiles = pathManager.getFilesFromDataset("validation", i)
-                allTestFiles = pathManager.getFilesFromDataset("test", i)
-                import pudb; pudb.set_trace()
-                for x, file in enumerate(allTestFiles):
-                    if os.path.isfile(file) and not os.path.isfile(allValidationFiles[x]):
-                        os.symlink(allTestFiles[x], allValidationFiles[x])
-                break
-    
-            # Step 1: Features file computation
-            if (os.path.isfile(featureFile) and not args.overwrite) or args.keep_features :
-                print(tab + "Reading the existing feature file...")
-                geof, xyz, rgb, graph_nn, labels = io.read_features(featureFile)
-            else :
-                if args.save:
-                    storePreviousFile(featureFile, timeStamp)
-    
-                # Step 1.1: Voxelize the data file 
-                timer.start(1)
-                if args.voxelize:
-                    print("Begin voxelisation step")
-                    if os.path.isfile(voxelisedFile) and not args.overwrite: 
-                        print("Voxelised file found, voxelisation step skipped")
-                        print("Read voxelised file")
-                    else:
-                        print(tab + "Reduce point density")
-                        mkdirIfNotExist(pathManager.rootPath + "/data/" + dataset + "-voxelised/")
-                        if args.voxel_width > 0:
-                            io.reduceDensity(dataFile, voxelisedFile, args.voxel_width, False if args.keep_density else True)
-    
-                        print(tab + "Save reduced density")
-                    dataFile = voxelisedFile
-                    dataType = args.format
-                else:
-                    print("Voxelisation step skipped")
-                    print("Read data file")
-    
-                xyz, rgb, labels, objects = io.read_file(dataFile, dataType)
-                if has_labels(labels, dataType):
-                    print("Labels found")
-                else :
-                    print("No labels found")
-                    n_labels = 0
-                    labels = np.array([])
-    
-                if colors.needAggregation:
-                    labels = np.array(colors.aggregateLabels(labels))
-                
-                timer.stop(1)
-                # Step 1.2: Compute nn graph
-                timer.start(2)
-                print(tab + "Compute both {}_nn and {}_nn graphs...".format(args.knn_adj, args.knn_geofeatures))
-                graph_nn, target_fea = graphs.compute_graph_nn_2(xyz, args.knn_adj, args.knn_geofeatures)
-    
-                # Step 1.3: Compute geometric features
-                print(tab + "Compute geometric features...")
-                geof = libply_c.compute_geof(xyz, target_fea, args.knn_geofeatures).astype('float32')
-                del target_fea
-    
-                # Step 1.4: Compute geometric features
-                io.write_features(featureFile, geof, xyz, rgb, graph_nn, labels)
-                timer.stop(2)
-    
-            # Step 2: Compute superpoint graph
-            timer.start(3)
-            sys.stdout.flush()
-            if os.path.isfile(spgFile) and not args.overwrite :
-                print(tab + "Reading the existing superpoint graph file...")
-                graph_sp, components, in_component = io.read_spg(spgFile)
+                duplicateTestFilesIntoValidation(pathManager)
+    else:
+        print("Sequential computation")
+        for dataset in pathManager.dataset:
+            if dataset == "validation" and args.validationIsTest:
+                continue
             else:
-                if args.save:
-                    storePreviousFile(spgFile, timeStamp)
-                #--- build the spg h5 file --
-    
-                # Add rgb to geometric feature to influence superpoint computation
-                features = addRGBToFeature(geof, rgb) 
-    
-                # heuristic used by s3dis
-                # increase the importance of verticality (heuristic)
-                # geof[:,3] = 2. * geof[:, 3]                 
-    
-                # Add an edge weight proportionnal to distance
-                # Weight= 1/dist+meanDist
-                graph_nn["edge_weight"] = np.array(1. / ( args.lambda_edge_weight + graph_nn["distances"] / np.mean(graph_nn["distances"])), dtype = 'float32')
-    
-                # Compute optimisation solution with cut pursuit
-                print(tab + "Resolve optimisation problem...")
-                components, in_component = libcp.cutpursuit(features, graph_nn["source"], graph_nn["target"], graph_nn["edge_weight"], args.reg_strength)
-                if np.array(in_component).sum() == 0:
-                    print("Error: cutpursuit not working, probably due to many duplicate points")
-                components = np.array(components, dtype = 'object')
-    
-    
-                print(tab + "Computation of the SPG...")
-                graph_sp = graphs.compute_sp_graph(xyz, args.d_se_max, in_component, components, labels, n_labels)
-    
-                # Structure graph_sp
-                # "sp_labels" = nb of points per label
-                # Ex: [ 0, 0, 10, 2] --> 10 pt of label 2 and 2 pt of label 3
-    
-                io.write_spg(spgFile, graph_sp, components, in_component)
-            
-            if os.path.isfile(parseFile) and not args.overwrite :
-                print(tab + "Reading the existing parsed file...")
-            else:
-                parseCloudForPointNET(featureFile, spgFile, parseFile)
-    
-            timer.stop(3)
-            timer.stop(0)
-            formattedTimer = timer.getFormattedTimer(["Total", "Voxelisation", "Features", "Superpoint graph"])
-            print(formattedTimer)
-            f = open(pathManager.localReportPath+"/sppComputationBenchmark.report", "a")
-            f.write(fileName+"\n")
-            f.write(formattedTimer+"\n\n")
-            f.close()
-            timer.reset()
+                for i in range(pathManager.getNbFiles(dataset)):
+                    fullPipeline(dataset, i, args,pathManager)
 
-            reportManager.computeStatOnSpp(graph_sp["sp_labels"], dataset)
-    
-        csvPath = pathManager.getSppCompCsvReport(dataset)
         if dataset == "validation" and args.validationIsTest:
-            csvTestPath = pathManager.getSppCompCsvReport("test")
-            if os.path.isfile(csvTestPath):
-                os.symlink(csvTestPath, csvPath)
-        else:
-            csvReport = reportManager.getCsvReport(dataset)
-            io.writeCsv(csvPath, csvReport[0], csvReport[1])
+            duplicateTestFilesIntoValidation(pathManager)
 
-    #pathManager.saveGeneralReport(reportManager.getFormattedReport())
+    # Stat computation are afterward to avoid parallel process problem
+    if not args.only_voxelize:
+        for dataset in pathManager.dataset:
+            if dataset == "validation" and args.validationIsTest:
+                continue
+            else:
+                reportManager = ReportManager(args, n_labels+1)
+                for i in range(pathManager.getNbFiles(dataset)):
+                    spgFile = pathManager.getFilesFromDataset(dataset, i)[5]
+                    graph_sp, components, in_component = io.read_spg(spgFile)
+                    reportManager.computeStatOnSpp(graph_sp["sp_labels"])
+
+                csvPath = pathManager.getSppCompCsvReport(dataset)
+                csvReport = reportManager.getCsvReport()
+                io.writeCsv(csvPath, csvReport[0], csvReport[1])
+
+        if dataset == "validation" and args.validationIsTest:
+            duplicateTestReportIntoValidation(pathManager)
 
 if __name__ == "__main__":
     main(sys.argv[1:])

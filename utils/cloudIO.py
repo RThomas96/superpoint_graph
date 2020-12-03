@@ -262,13 +262,13 @@ def write_features(file_name, geof, xyz, rgb, graph_nn, labels):
     if os.path.isfile(file_name):
         os.remove(file_name)
     data_file = h5py.File(file_name, 'w')
-    data_file.create_dataset('geof', data=geof, dtype='float32')
-    data_file.create_dataset('source', data=graph_nn["source"], dtype='uint32')
-    data_file.create_dataset('target', data=graph_nn["target"], dtype='uint32')
-    data_file.create_dataset('distances', data=graph_nn["distances"], dtype='float32')
-    data_file.create_dataset('xyz', data=xyz, dtype='float32')
+    data_file.create_dataset('geof', data=geof, dtype='float32', compression="gzip", compression_opts=7)
+    data_file.create_dataset('source', data=graph_nn["source"], dtype='uint32', compression="gzip", compression_opts=7)
+    data_file.create_dataset('target', data=graph_nn["target"], dtype='uint32', compression="gzip", compression_opts=7)
+    data_file.create_dataset('distances', data=graph_nn["distances"], dtype='float32', compression="gzip", compression_opts=7)
+    data_file.create_dataset('xyz', data=xyz, dtype='float32', compression="gzip", compression_opts=7)
     if len(rgb) > 0:
-        data_file.create_dataset('rgb', data=rgb, dtype='uint8')
+        data_file.create_dataset('rgb', data=rgb, dtype='uint8', compression="gzip", compression_opts=7)
 
     #if len(labels) > 0:
     #    if len(labels) > 0 and len(labels.shape)>1 and labels.shape[1]>1:
@@ -276,9 +276,9 @@ def write_features(file_name, geof, xyz, rgb, graph_nn, labels):
     #    else:
     #        data_file.create_dataset('labels', data=labels, dtype='uint8')
     if len(labels) > 0 and len(labels.shape)>1 and labels.shape[1]>1:
-        data_file.create_dataset('labels', data=labels, dtype='uint32')
+        data_file.create_dataset('labels', data=labels, dtype='uint32', compression="gzip", compression_opts=7)
     else:
-        data_file.create_dataset('labels', data=labels, dtype='uint8')
+        data_file.create_dataset('labels', data=labels, dtype='uint8', compression="gzip", compression_opts=7)
     data_file.close()
 #------------------------------------------------------------------------------
 def read_features(file_name):

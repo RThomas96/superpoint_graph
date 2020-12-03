@@ -9,6 +9,10 @@ from visualize_result import main as visualize
 from train import main as train 
 import pandas as pd
 import csv
+import multiprocessing
+from mpi4py import MPI
+import time
+from timer import Timer
 
 class SppArgs:
     def __init__(self, project_path, argDict):
@@ -55,56 +59,75 @@ def mergeCsvPerPair(files1, files2):
         
 
 def main(args):
+
+    comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
+
+    print("Pipeline start at: " + time.asctime())
+    timer = Timer(1)
+    timer.start(0)
+
     parser = argparse.ArgumentParser(description='Batch pipeline')
     parser.add_argument('project_path', help='Project name')
     parser.add_argument('data_path', help='Directory with the data files')
+    parser.add_argument('--preproc_only', action='store_true', help='Only perform preprocessing step')
+    parser.add_argument('--start', default=0, type=int, help='Only perform preprocessing step')
+    parser.add_argument('--it', default=0.01, type=float, help='Only perform preprocessing step')
     args = parser.parse_args(args)
 
     rawSppArgs = {
             "--knn_geofeatures" : 100,
             "--knn_adj" : 10,
             "--lambda_edge_weight" : float(1.),
-            "--reg_strength" : float(0.03),
+            "--reg_strength" : float(0.01),
             "--d_se_max" : 0,
             "--voxel_width" : float(0.03),
-            "--voxelize" : "none",
-            "--validationIsTest" : "none"
+            "--validationIsTest" :"none",
+            "--voxelize" :"none",
+            "--parallel" : "none"
     }
 
     allProjectsPath = []
-    for i in range(1, 10):
-        rawSppArgs["--reg_strength"] += float(0.01)
-        rawSppArgs["--reg_strength"] = round(rawSppArgs["--reg_strength"], 2)# Avoid decimal error
-        sppArgs = SppArgs(args.project_path, rawSppArgs)
-        allProjectsPath.append("projects/" + sppArgs.getProjectPath())
-        try:
-            os.makedirs("projects/" + sppArgs.getProjectPath())
-            os.symlink(args.data_path, "projects/" + sppArgs.getProjectPath() + "/data")
+    jobs = []
 
-            superpointComputation(sppArgs.toList() + ["--format", "laz"])
-            train([sppArgs.getProjectPath(), "--epoch", "20"])
-            visualize([sppArgs.getProjectPath(), "test", "LPA3-1", "--outType", "spctgd", "--format", "laz"])
+    it = rank + 1
+    rawSppArgs["--reg_strength"] += float(it) * float(args.it) + float(args.start) * float(args.it)
+    rawSppArgs["--reg_strength"] = round(rawSppArgs["--reg_strength"], 2)# Avoid decimal error
+    sppArgs = SppArgs(args.project_path, rawSppArgs)
+    allProjectsPath.append("projects/" + sppArgs.getProjectPath())
+    try:
+        os.makedirs("projects/" + sppArgs.getProjectPath())
+        os.symlink(args.data_path, "projects/" + sppArgs.getProjectPath() + "/data")
+    except FileExistsError:
+        print("Project already exist, scan to complete")
 
-        except FileExistsError:
-            print("This project already exist, pass")
+    superpointComputation(sppArgs.toList() + ["--format", "laz"])
+    if not args.preproc_only:
+        train([sppArgs.getProjectPath(), "--epoch", "200", "--resume"])
+        visualize([sppArgs.getProjectPath(), "test", "LPA3-1", "--outType", "spctgd", "--format", "laz"])
+    else:
+        visualize([sppArgs.getProjectPath(), "test", "LPA3-1", "--outType", "sgd", "--format", "laz"])
+
+    timer.stop(0)
+    print(timer.getFormattedTimer(["Total time: "]))
 
     #import pudb; pudb.set_trace()
 
-    allProjectsPath = ["projects/" + args.project_path + "/" + x for x in os.listdir("projects/" + args.project_path) if os.path.isdir("projects/" + args.project_path + "/" + x)]
-    # Concat all csv files
-    sppStatTest = [f +"/reports/sppComputation/testStats.csv" for f in allProjectsPath]
-    trainStatTest = [f +"/reports/training/testStats.csv" for f in allProjectsPath]
+    #allProjectsPath = ["projects/" + args.project_path + "/" + x for x in os.listdir("projects/" + args.project_path) if os.path.isdir("projects/" + args.project_path + "/" + x)]
+    ## Concat all csv files
+    #sppStatTest = [f +"/reports/sppComputation/testStats.csv" for f in allProjectsPath]
+    #trainStatTest = [f +"/reports/training/testStats.csv" for f in allProjectsPath]
 
-    sppStatValidation = [f +"/reports/sppComputation/validationStats.csv" for f in allProjectsPath]
-    trainStatValidation = [f +"/reports/training/validationStats.csv" for f in allProjectsPath]
+    #sppStatValidation = [f +"/reports/sppComputation/validationStats.csv" for f in allProjectsPath]
+    #trainStatValidation = [f +"/reports/training/validationStats.csv" for f in allProjectsPath]
 
-    fullReportTest = mergeCsvPerPair(sppStatTest, trainStatTest)
-    fullReportTest = pd.concat(fullReportTest)
-    fullReportTest.to_csv("projects/" + sppArgs.getProjectPath() + "/../full_spp_testDataset.csv", index=False, na_rep='nan', sep=';')
+    #fullReportTest = mergeCsvPerPair(sppStatTest, trainStatTest)
+    #fullReportTest = pd.concat(fullReportTest)
+    #fullReportTest.to_csv("projects/" + sppArgs.getProjectPath() + "/../full_spp_testDataset.csv", index=False, na_rep='nan', sep=';')
 
-    fullReportValidation = mergeCsvPerPair(sppStatValidation, trainStatValidation)
-    fullReportValidation = pd.concat(fullReportValidation)
-    fullReportValidation.to_csv("projects/" + sppArgs.getProjectPath() + "/../full_spp_validationDataset.csv", index=False, na_rep='nan', sep=';')
+    #fullReportValidation = mergeCsvPerPair(sppStatValidation, trainStatValidation)
+    #fullReportValidation = pd.concat(fullReportValidation)
+    #fullReportValidation.to_csv("projects/" + sppArgs.getProjectPath() + "/../full_spp_validationDataset.csv", index=False, na_rep='nan', sep=';')
 
 if __name__ == "__main__":
     main(sys.argv[1:])

@@ -163,7 +163,7 @@ def main(args):
     create_dataset = custom_dataset.get_datasets
 
     # Create model and optimizer
-    if args.resume :
+    if args.resume and os.path.isfile(pathManager.modelFile):
         model, optimizer = resume(args, dbinfo, pathManager.modelFile)
     else:
         print("Setup CUDA model")
