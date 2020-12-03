@@ -12,5 +12,5 @@ beta
 projects
 automation
 *.swp
-partition/ply_c
-partition/cut-pursuit
+partition/ply_c/
+partition/cut-pursuit/
