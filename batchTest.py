@@ -104,9 +104,9 @@ def main(args):
     superpointComputation(sppArgs.toList() + ["--format", "laz"])
     if not args.preproc_only:
         train([sppArgs.getProjectPath(), "--epoch", "200", "--resume"])
-        visualize([sppArgs.getProjectPath(), "test", "LPA3-1", "--outType", "spctgd", "--format", "laz"])
+        visualize([sppArgs.getProjectPath(), "test", "LPA3-1", "--outType", "spctgde", "--format", "laz"])
     else:
-        visualize([sppArgs.getProjectPath(), "test", "LPA3-1", "--outType", "sgd", "--format", "laz"])
+        visualize([sppArgs.getProjectPath(), "test", "LPA3-1", "--outType", "sgde", "--format", "laz"])
 
     timer.stop(0)
     print(timer.getFormattedTimer(["Total time: "]))

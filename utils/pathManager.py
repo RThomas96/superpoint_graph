@@ -89,7 +89,7 @@ class PathManager :
         transFile   = self.rootPath + "/visualisation/features/" + fileName + "_trans." + self.outFormat
         geofFile   = self.rootPath + "/visualisation/features/" + fileName + "_geof." + self.outFormat
         stdFile   = self.rootPath + "/visualisation/features/" + fileName  + "_std." + self.outFormat
-        confidencePredictionFile   = self.rootPath + "/visualisation/predictions/" + fileName  + "_conf." + self.outFormat
+        confidencePredictionFile   = self.rootPath + "/visualisation/features/" + fileName  + "_conf." + self.outFormat
 
         return sppFile, predictionFile, transFile, geofFile, stdFile, confidencePredictionFile
 

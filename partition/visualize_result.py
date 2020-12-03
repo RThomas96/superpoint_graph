@@ -45,6 +45,13 @@ def openRawPredictions(res_file, h5FolderPath):
     except OSError:
         raise ValueError("%s does not exist in %s" % (h5FolderPath, res_file))
 
+def openParsedFeatures(parsed_file):
+    e = []
+    file = h5py.File(parsed_file, 'r')
+    for key in list(file.keys()):
+        e.append(np.array(file.get(key)))
+    return e 
+
 def main(args):
     parser = argparse.ArgumentParser(description='Generate ply file from prediction file')
     parser.add_argument('ROOT_PATH', help='Folder name which contains data')
@@ -52,7 +59,7 @@ def main(args):
     parser.add_argument('fileName', help='Full path of file to display, from data folder, must be "test/X"')
     parser.add_argument('-ow', '--overwrite', action='store_true', help='Wether to read existing files or overwrite them')
     parser.add_argument('--supervized', action='store_true', help='Wether to read existing files or overwrite them')
-    parser.add_argument('--outType', default='p', help='which cloud to output: s = superpoints, p = predictions, t = transitions (only for supervized partitions), g = geof, d = geof std, c = confidence')
+    parser.add_argument('--outType', default='p', help='which cloud to output: s = superpoints, p = predictions, t = transitions (only for supervized partitions), g = geof, d = geof std, c = confidence, e = elevation')
     parser.add_argument('--filter_label', help='Output only SPP with a specific label')
     parser.add_argument('--log', help='Files are read from log directory, you can set some REG_STRENGTH value to choose which file to choose')
     parser.add_argument('--format', default="laz", type=str, help='Format in which all clouds will be saved')
@@ -65,6 +72,7 @@ def main(args):
     outTransitions = 't' in args.outType
     outGeof = 'g' in args.outType
     outStd = 'd' in args.outType
+    outElevation = 'e' in args.outType
     
     pathManager = PathManager(args.ROOT_PATH, args.format)
     
@@ -103,9 +111,14 @@ def main(args):
         except ValueError:
             print("Can't visualize predictions")
 
+    # Confidence
     if outRawPredictions:
-            pred_raw = openRawPredictions(pathManager.rawPredictionFile, args.dataset + "/" + fileName)
-            visu.writeRawPrediction(confPredictionFile, xyz, pred_raw, components)
+        pred_raw = openRawPredictions(pathManager.rawPredictionFile, args.dataset + "/" + fileName)
+        visu.writeRawPrediction(confPredictionFile, xyz, pred_raw, components)
+
+    if outElevation:
+        parsedFeatures = openParsedFeatures(parseFile)
+        visu.writeElevation(confPredictionFile.replace("_conf", "_elevation"), parsedFeatures)
     
     if outSuperpoints and args.filter_label is not None:
         print("Filter activated")

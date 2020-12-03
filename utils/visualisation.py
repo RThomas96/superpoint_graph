@@ -59,6 +59,23 @@ def writeGeof(filename, xyz, geof, dataType="laz"):
     color = np.array(255 * geof[:, [0, 1, 3]], dtype='uint8')
     io.write_file(filename, xyz, color, dataType)
 #------------------------------------------------------------------------------
+def writeElevation(filename, parsedFeatures, dataType="laz"):
+
+    xyz = []
+    color = []
+    maxElevation = 0
+    for comp in parsedFeatures:
+        for pt in comp:
+            xyz.append([pt[0], pt[1], pt[2]])
+            color.append([0, max(0, pt[6]), 0])
+            if pt[6] > maxElevation:
+                maxElevation = pt[6]
+
+    color /= maxElevation
+    color *= 255
+
+    io.write_file(filename, np.array(xyz), np.array(color), dataType)
+#------------------------------------------------------------------------------
 def writeGeofstd(filename, xyz, geof, components, in_component, dataType="laz"):
     geofpt = np.copy(components)   
     geofpt = [geof[x] for x in components]
