@@ -90,7 +90,7 @@ def main(args):
     allProjectsPath = []
     jobs = []
 
-    it = rank + 1
+    it = rank
     rawSppArgs["--reg_strength"] += float(it) * float(args.it) + float(args.start) * float(args.it)
     rawSppArgs["--reg_strength"] = round(rawSppArgs["--reg_strength"], 2)# Avoid decimal error
     sppArgs = SppArgs(args.project_path, rawSppArgs)
