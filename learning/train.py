@@ -67,12 +67,13 @@ def main(args):
     # Learning process arguments
     parser.add_argument('--cuda', default=1, type=int, help='Bool, use cuda')
     parser.add_argument('--nworkers', default=0, type=int, help='Num subprocesses to use for data loading. 0 means that the data will be loaded in the main process')
-    parser.add_argument('--test_nth_epoch', default=1, type=int, help='Test each n-th epoch during training')
-    parser.add_argument('--test_train_nth_epoch', default=1, type=int, help='Test each n-th epoch during training on training data')
-    parser.add_argument('--test_valid_nth_epoch', default=1, type=int, help='Test each n-th epoch during training on validation data')
-    parser.add_argument('--save_nth_epoch', default=1, type=int, help='Save model each n-th epoch during training')
+    parser.add_argument('--eval_nth_epoch', default=10, type=int, help='Test each n-th epoch during training')
+    #parser.add_argument('--test_train_nth_epoch', default=1, type=int, help='Test each n-th epoch during training on training data')
+    #parser.add_argument('--test_valid_nth_epoch', default=1, type=int, help='Test each n-th epoch during training on validation data')
+    parser.add_argument('--save_nth_epoch', default=10, type=int, help='Save model each n-th epoch during training, isn\'t take into account if only best is set. Then the model is saved evey time there is a better model')
+    parser.add_argument('--only_best', action='store_true', help='Keep the model even if the result is worst')
+
     parser.add_argument('--test_multisamp_n', default=10, type=int, help='Average logits obtained over runs with different seeds')
-    parser.add_argument('--not_only_best', action='store_true', help='Keep the model even if the result is worst')
 
 
     # Dataset
@@ -362,11 +363,21 @@ def main(args):
     IOU_COLOR =   '\x1b[33;1m'
     CLOSE =       '\x1b[0m'
     epoch = args.start_epoch
+
+    classNames = list(ColorLabelManager().label2Name.values())[1:] # Without "unknown"
+    def rename(l, name):
+        return [name + i for i in l]
+
+    def saveResult(epoch, loss, CM_pt, CM_spp, reportPath):
+        acc_pt, avg_iou, avg_prec, avg_rec, iou_per_class, prec_per_class, rec_per_class = CM_pt.getStats()
+        acc_spp = CM_spp.getAccuracy()
+        header = ["epoch", "acc_pt", "acc_spp", "loss", "avg_iou", "avg_prec", "avg_rec"] + rename(classNames, "avg_iou_") + rename(classNames, "avg_prec_") + rename(classNames, "avg_rec_")
+        data = np.concatenate([[int(epoch), acc_pt, acc_spp, loss, avg_iou, avg_prec, avg_rec], iou_per_class, prec_per_class, rec_per_class])
+        io.writeCsv(reportPath, header, data)
     
     " Epoch is number of time you parse all data "
     for epoch in range(args.start_epoch, args.epochs):
-        isBest = False
-        
+
         firstEpoch = (epoch==args.start_epoch)
         print('#################')
         print('Epoch {}/{} ({}):'.format(epoch, args.epochs, args.ROOT_PATH))
@@ -374,70 +385,44 @@ def main(args):
         " Update tensor if grad is computed "
         scheduler.step() 
 
+        isEvalEpoch = (epoch % args.eval_nth_epoch == 0)
+        isSaveEpoch = (epoch % args.save_nth_epoch == 0)
+
         # 1. Train
         loss_train, CM_train_pt, CM_train_spp = train()
-
         print(TRAIN_COLOR + '-> Train Loss: %1.4f' % (loss_train) + CLOSE)
-
         if math.isnan(loss_train): break
 
-        # 2. Test on validation dataset
-        if firstEpoch or (epoch % args.test_valid_nth_epoch == 0):
-            loss_val, CM_val_pt, CM_val_spp = eval(True)
-            acc_pt_val, avg_iou_val, avg_prec_val, avg_rec_val, iou_per_class_val, prec_per_class_val, rec_per_class_val = CM_val_pt.getStats()
-            acc_spp_val = CM_val_spp.getAccuracy()
-            print(VAL_COLOR + 'Validation -> loss: %1.4f,  acc pt: %3.2f%%,  acc spp: %3.2f%%,  avgIoU: %3.2f%%' % (loss_val*100, acc_pt_val*100, acc_spp_val*100, avg_iou_val*100) + CLOSE)
+        saveResult(epoch, loss_train, CM_train_pt, CM_train_spp, pathManager.getTrainingCsvReport("train"))
 
-        # 3. Test on test dataset
-        if firstEpoch or (epoch % args.test_nth_epoch == 0): 
+        # 2. Evaluation
+        if firstEpoch or isEvalEpoch:
             loss_test, CM_test_pt, CM_test_spp = eval(False)
-            acc_pt_test, avg_iou_test, avg_prec_test, avg_rec_test, iou_per_class_test, prec_per_class_test, rec_per_class_test = CM_test_pt.getStats()
-            acc_spp_test = CM_test_spp.getAccuracy()
-            print(IOU_COLOR + 'IoU: %3.2f%%' % (avg_iou_test*100) + CLOSE)
-            print(TEST_COLOR + 'Test       -> loss: %1.4f,  acc pt: %3.2f%%,  acc spp: %3.2f%%,  avgIoU: %3.2f%%' % (loss_test*100, acc_pt_test*100, acc_spp_test*100, avg_iou_test*100) + CLOSE)
+            saveResult(epoch, loss_test, CM_test_pt, CM_test_spp, pathManager.getTrainingCsvReport("test"))
 
-        # 4. Check if isBest
-        if avg_iou_val > best_iou or epoch < 5:
-            print(BEST_COLOR + 'New best model achieved!' + CLOSE)
-            best_iou = avg_iou_val
-            isBest = True
-        else:
-            print(BAD_COLOR + 'Bad model' + CLOSE)
+            loss_val, CM_val_pt, CM_val_spp = eval(True)
+            if args.only_best:
+                isBest = CM_val_pt.getAvgIoU() > best_iou or epoch < 5
+                if isBest:
+                    print(BEST_COLOR + 'New best model achieved!' + CLOSE)
+                    best_iou = CM_val_pt.getAvgIoU() 
+                    saveResult(epoch, loss_val, CM_val_pt, CM_val_spp, pathManager.getTrainingCsvReport("validation"))
+                    torch.save({'epoch': epoch + 1, 'args': args, 'state_dict': model.state_dict(), 'optimizer' : optimizer.state_dict(), 'scaler': scaler}, pathManager.modelFile)
+                else:
+                    print(BAD_COLOR + 'Bad model' + CLOSE)
+                    args.resume = pathManager.modelFile 
+                    model, optimizer = resume(args, dbinfo, pathManager.modelFile)
+                    io.duplicateLastLineCsv(pathManager.getTrainingCsvReport("validation"), int(epoch))
+            else:
+                saveResult(epoch, loss_val, CM_val_pt, CM_val_spp, pathManager.getTrainingCsvReport("validation"))
 
-        # 5 Bonus. If needed resume last best model
-        if not isBest and not args.not_only_best:
-            args.resume = pathManager.modelFile 
-            model, optimizer = resume(args, dbinfo, pathManager.modelFile)
-            #args.start_epoch += 1
-            #epoch += 1
-        
-        # 6. Write the csv stat file
+            print(VAL_COLOR + 'Validation -> loss: %1.4f,  acc pt: %3.2f%%,  acc spp: %3.2f%%,  avgIoU: %3.2f%%' % (loss_val, CM_val_pt.getAccuracy()*100, CM_val_spp.getAccuracy()*100, CM_val_pt.getAvgIoU()*100) + CLOSE)
+            print(IOU_COLOR + 'IoU: %3.2f%%' % (CM_test_pt.getAvgIoU()*100) + CLOSE)
+            print(TEST_COLOR + 'Test       -> loss: %1.4f,  acc pt: %3.2f%%,  acc spp: %3.2f%%,  avgIoU: %3.2f%%' % (loss_test, CM_test_pt.getAccuracy()*100, CM_test_spp.getAccuracy()*100, CM_test_pt.getAvgIoU()*100) + CLOSE)
 
-        # Validation
-        classNames = list(ColorLabelManager().label2Name.values())[1:] # Without "unknown"
-
-        def rename(l, name):
-            return [name + i for i in l]
-
-        reportPath = pathManager.getTrainingCsvReport("validation")
-        if isBest:
-            header = ["epoch", "acc_pt", "acc_spp", "loss", "avg_iou", "avg_prec", "avg_rec"] + rename(classNames, "avg_iou_val_") + rename(classNames, "avg_prec_val_") + rename(classNames, "avg_rec_val_") 
-            data = np.concatenate([[int(epoch), acc_pt_val, acc_spp_val, loss_val, avg_iou_val, avg_prec_val, avg_rec_val], iou_per_class_val, prec_per_class_val, rec_per_class_val])
-            io.writeCsv(reportPath, header, data)
-        else:
-            io.duplicateLastLineCsv(reportPath)
-
-        reportPath = pathManager.getTrainingCsvReport("test")
-        if firstEpoch or (epoch % args.test_nth_epoch == 0): 
-            header = ["epoch", "acc_pt", "acc_spp", "loss", "avg_iou", "avg_prec", "avg_rec"] + rename(classNames, "avg_iou_test_") + rename(classNames, "avg_prec_test_") + rename(classNames, "avg_rec_test_")
-            data = np.concatenate([[int(epoch), acc_pt_test, acc_spp_test, loss_test, avg_iou_test, avg_prec_test, avg_rec_test], iou_per_class_test, prec_per_class_test, rec_per_class_test])
-            io.writeCsv(reportPath, header, data)
-        else:
-            io.duplicateLastLineCsv(reportPath)
-
-        # 7. Save the model
-        if (firstEpoch and args.not_only_best) or (isBest and not args.not_only_best) or (epoch % args.save_nth_epoch == 0):
+        if isSaveEpoch and not args.only_best:
             torch.save({'epoch': epoch + 1, 'args': args, 'state_dict': model.state_dict(), 'optimizer' : optimizer.state_dict(), 'scaler': scaler}, pathManager.modelFile)
+
 
     # 8. Final evaluation
     if args.test_multisamp_n>0 and 'test' in args.db_test_name:

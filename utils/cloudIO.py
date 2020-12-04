@@ -393,7 +393,7 @@ def writeCsv(file, header, data):
         spamwriter.writerow(data)
 
 #-----------------------------------------------------------------------------
-def duplicateLastLineCsv(file):
+def duplicateLastLineCsv(file, epoch = -1):
     data = [] 
     with open(file, 'r', newline='') as csvfile:
         csvreader = csv.reader(csvfile, delimiter=';', quotechar='|', quoting=csv.QUOTE_MINIMAL)
@@ -401,5 +401,8 @@ def duplicateLastLineCsv(file):
             data.append(row)
 
     data = data[-1]
-    data[0] = str(float(data[0]) + 1) # Increment epoch
+    if epoch == -1:
+        data[0] = str(float(data[0]) + 1) # Increment epoch
+    else:
+        data[0] = epoch
     writeCsv(file, [], data)
