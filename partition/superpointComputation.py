@@ -133,17 +133,17 @@ def addRGBToFeature(features, rgb):
 def mkdirIfNotExist(dir):
     if not os.path.isdir(dir): os.mkdir(dir)
 
-def fullPipeline(dataset, i, args, pathManager):
+def fullPipeline(i, args, pathManager):
     colors = ColorLabelManager()
     n_labels = colors.nbColor
 
     timer = Timer(4)
     timer.start(0)
-    fileName, dataFile, dataType, voxelisedFile, featureFile, spgFile, parseFile = pathManager.getFilesFromDataset(dataset, i)
+    fileName, dataFile, dataType, voxelisedFile, featureFile, spgFile, parseFile = pathManager.getFilesFromDataset(i)
     #TODO: cause n_labels is reset
     n_labels = colors.nbColor
 
-    print(str(i + 1) + " / " + str(len(pathManager.allDataFileName[dataset])) + " ---> "+fileName)
+    print(str(i + 1) + " / " + str(len(pathManager.allDataFileName)) + " ---> "+fileName)
     tab="   "
 
     if not args.overwrite and os.path.isfile(featureFile) and os.path.isfile(spgFile) and os.path.isfile(parseFile):
@@ -168,7 +168,6 @@ def fullPipeline(dataset, i, args, pathManager):
                 print("Read voxelised file")
             else:
                 print(tab + "Reduce point density")
-                mkdirIfNotExist(pathManager.rootPath + "/data/" + dataset + "-voxelised/")
                 if args.voxel_width > 0:
                     io.reduceDensity(dataFile, voxelisedFile, args.voxel_width, False if args.keep_density else True)
 
@@ -317,51 +316,30 @@ def main(args):
     colors = ColorLabelManager()
     n_labels = colors.nbColor
     
-    if args.parallel > 0:
+    if args.parallel:
         print("Paralell computation activated")
         with multiprocessing.Pool(multiprocessing.cpu_count()) as pool:    
             proc = []
-            for dataset in pathManager.dataset:
-                if args.validationIsTest and dataset == "validation":
-                    continue
-                else:
-                    for i in range(pathManager.getNbFiles(dataset)):
-                        proc.append(pool.apply_async(fullPipeline, (dataset, i, args,pathManager,)))
+            for i in range(pathManager.getNbFiles()):
+                proc.append(pool.apply_async(fullPipeline, (i, args,pathManager,)))
             for pr in proc:
                 pr.get()
-
-            if dataset == "validation" and args.validationIsTest:
-                duplicateTestFilesIntoValidation(pathManager)
     else:
         print("Sequential computation")
-        for dataset in pathManager.dataset:
-            if dataset == "validation" and args.validationIsTest:
-                continue
-            else:
-                for i in range(pathManager.getNbFiles(dataset)):
-                    fullPipeline(dataset, i, args,pathManager)
-
-        if dataset == "validation" and args.validationIsTest:
-            duplicateTestFilesIntoValidation(pathManager)
+        for i in range(pathManager.getNbFiles()):
+            fullPipeline(i, args,pathManager)
 
     # Stat computation are afterward to avoid parallel process problem
     if not args.only_voxelize:
-        for dataset in pathManager.dataset:
-            if dataset == "validation" and args.validationIsTest:
-                continue
-            else:
-                reportManager = ReportManager(args, n_labels+1)
-                for i in range(pathManager.getNbFiles(dataset)):
-                    spgFile = pathManager.getFilesFromDataset(dataset, i)[5]
-                    graph_sp, components, in_component = io.read_spg(spgFile)
-                    reportManager.computeStatOnSpp(graph_sp["sp_labels"])
-
-                csvPath = pathManager.getSppCompCsvReport(dataset)
-                csvReport = reportManager.getCsvReport()
-                io.writeCsv(csvPath, csvReport[0], csvReport[1])
-
-        if dataset == "validation" and args.validationIsTest:
-            duplicateTestReportIntoValidation(pathManager)
+        for i in range(pathManager.getNbFiles()):
+            fileName = pathManager.getFilesFromDataset(i)[0]
+            spgFile = pathManager.getFilesFromDataset(i)[5]
+            graph_sp, components, in_component = io.read_spg(spgFile)
+            reportManager = ReportManager(args, n_labels+1)
+            reportManager.computeStatOnSpp(graph_sp["sp_labels"])
+            csvPath = pathManager.getSppCompCsvReport(fileName)
+            csvReport = reportManager.getCsvReport()
+            io.writeCsv(csvPath, csvReport[0], csvReport[1])
 
 if __name__ == "__main__":
     main(sys.argv[1:])

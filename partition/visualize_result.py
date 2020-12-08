@@ -23,7 +23,7 @@ from pathManager import PathManager
 def openPredictions(res_file, h5FolderPath, components, xyz):
     try:
         h5FileFolders = list(h5py.File(res_file, 'r').keys())
-        if not os.path.split(h5FolderPath)[0] in h5FileFolders:
+        if not h5FolderPath in h5FileFolders:
             print("%s does not exist in %s" % (h5FolderPath, res_file))
             raise ValueError("%s does not exist in %s" % (h5FolderPath, res_file))
         pred_red  = np.array(h5py.File(res_file, 'r').get(h5FolderPath))        
@@ -38,7 +38,7 @@ def openPredictions(res_file, h5FolderPath, components, xyz):
 def openRawPredictions(res_file, h5FolderPath):
     try:
         h5FileFolders = list(h5py.File(res_file, 'r').keys())
-        if not os.path.split(h5FolderPath)[0] in h5FileFolders:
+        if not h5FolderPath in h5FileFolders:
             print("%s does not exist in %s" % (h5FolderPath, res_file))
             raise ValueError("%s does not exist in %s" % (h5FolderPath, res_file))
         return np.array(h5py.File(res_file, 'r').get(h5FolderPath))        
@@ -55,7 +55,6 @@ def openParsedFeatures(parsed_file):
 def main(args):
     parser = argparse.ArgumentParser(description='Generate ply file from prediction file')
     parser.add_argument('ROOT_PATH', help='Folder name which contains data')
-    parser.add_argument('dataset', help='Full path of file to display, from data folder, must be "test/X"')
     parser.add_argument('fileName', help='Full path of file to display, from data folder, must be "test/X"')
     parser.add_argument('-ow', '--overwrite', action='store_true', help='Wether to read existing files or overwrite them')
     parser.add_argument('--supervized', action='store_true', help='Wether to read existing files or overwrite them')
@@ -63,6 +62,7 @@ def main(args):
     parser.add_argument('--filter_label', help='Output only SPP with a specific label')
     parser.add_argument('--log', help='Files are read from log directory, you can set some REG_STRENGTH value to choose which file to choose')
     parser.add_argument('--format', default="laz", type=str, help='Format in which all clouds will be saved')
+    parser.add_argument('--specify_run', default=-1, type=str, help='Format in which all clouds will be saved')
 
     args = parser.parse_args(args)
     
@@ -73,6 +73,10 @@ def main(args):
     outGeof = 'g' in args.outType
     outStd = 'd' in args.outType
     outElevation = 'e' in args.outType
+
+    runIndex = 0
+    if args.specify_run > -1:
+        runIndex = args.specify_run
     
     pathManager = PathManager(args.ROOT_PATH, args.format)
     
@@ -83,10 +87,9 @@ def main(args):
     #    folder = os.path.split(args.file_path)[0] + '/'
     #    file_name = os.path.split(args.file_path)[1]
     
-    fileName, dataFile, dataType, voxelisedFile, featureFile, spgFile, parseFile = pathManager.getFilesFromDataset(args.dataset, args.fileName)
-    res_file = pathManager.predictionFile 
+    fileName, dataFile, dataType, voxelisedFile, featureFile, spgFile, parseFile = pathManager.getFilesFromDataset(args.fileName)
     
-    sppFile, predictionFile, transFile, geofFile, stdFile, confPredictionFile = pathManager.getVisualisationFilesFromDataset(args.dataset, args.fileName)
+    sppFile, predictionFile, transFile, geofFile, stdFile, confPredictionFile = pathManager.getVisualisationFilesFromDataset(args.fileName, runIndex)
     
     #if args.supervized:
     #    xyz, rgb, edg_source, edg_target, is_transition, local_geometry, labels, objects, elevation, xyn = graph.read_structure(supervized_fea_file, False)
@@ -94,7 +97,7 @@ def main(args):
     geof, xyz, rgb, graph_nn, labels = io.read_features(featureFile)
     
     graph_spg, components, in_component = io.read_spg(spgFile)
-    
+
     if outStd:
         visu.writeGeofstd(stdFile, xyz, geof, components, in_component)
     
@@ -106,14 +109,14 @@ def main(args):
     
     if outPredictions:
         try:
-            pred_full = openPredictions(res_file, args.dataset + "/" + fileName, components, xyz)
+            pred_full = openPredictions(pathManager.getPredictionFile(runIndex), fileName, components, xyz)
             visu.writePrediction(predictionFile, xyz, pred_full)
         except ValueError:
             print("Can't visualize predictions")
 
     # Confidence
     if outRawPredictions:
-        pred_raw = openRawPredictions(pathManager.rawPredictionFile, args.dataset + "/" + fileName)
+        pred_raw = openRawPredictions(pathManager.getRawPredictionFile(runIndex), fileName)
         visu.writeRawPrediction(confPredictionFile, xyz, pred_raw, components)
 
     if outElevation:

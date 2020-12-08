@@ -23,6 +23,7 @@ from collections import defaultdict
 import h5py
 import cloudIO as io
 #from IPython.core.debugger import set_trace
+import multiprocessing
 
 import torch
 import torch.nn as nn
@@ -46,11 +47,296 @@ from pathManager import PathManager
 from confusionMatrix import ConfusionMatrix
 from timer import Timer
 
+def fullTrainingLoop(args, pathManager, i):
+
+    def rename(l, name):
+        return [name + i for i in l]
+
+    def saveResult(epoch, loss, CM_pt, CM_spp, reportPath):
+        acc_pt, avg_iou, avg_prec, avg_rec, iou_per_class, prec_per_class, rec_per_class = CM_pt.getStats()
+        acc_spp = CM_spp.getAccuracy()
+        header = ["epoch", "acc_pt", "acc_spp", "loss", "avg_iou", "avg_prec", "avg_rec"] + rename(classNames, "avg_iou_") + rename(classNames, "avg_prec_") + rename(classNames, "avg_rec_")
+        data = np.concatenate([[int(epoch), acc_pt, acc_spp, loss, avg_iou, avg_prec, avg_rec], iou_per_class, prec_per_class, rec_per_class])
+        io.writeCsv(reportPath, header, data)
+
+    def train(model):
+        """ Trains for one epoch """
+        model.train()
+
+        " collate_fn = function called on each sample per batch in order to concatenate them into a single batch "
+        " batch_size = number of sample i.e spg, per batch, default value is 2 "
+        loader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size, collate_fn=spg.eccpc_collate, num_workers=args.nworkers, shuffle=True, drop_last=True)
+        if logging.getLogger().getEffectiveLevel() > logging.DEBUG: loader = tqdm(loader, ncols=65)
+
+        # tnt.meter.AverageValueMeter() --> just average a value
+        loss_meter = tnt.meter.AverageValueMeter()
+
+        # Official confusion matrix from semantic3D
+        #officialConfusionMatrix = metrics.ConfusionMatrix(dbinfo['classes'])
+
+        # Custom confusion matrix
+        confusionMatrix = ConfusionMatrix(dbinfo['classes'])
+        confusionMatrixSpp = ConfusionMatrix(dbinfo['classes'])
+
+        timer = Timer(2)
+        timer.start(0)
+
+        # iterate over dataset in batches
+        for targets, GIs, clouds_data in loader:
+            timer.stop(0)
+
+            model.ecc.set_info(GIs, args.cuda)
+            " Here label_mode is the ground truth, stored on the first column of targets"
+            " label_vec_cpu is how many points of each class has been classified, usefull later for confusion matrix, start from 2: cause 1: is unknown label "
+            " segm_size_cpu is the total amount of points on the point cloud, unknown included "
+            label_mode_cpu, label_vec_cpu, segm_size_cpu = targets[:,0], targets[:,2:], targets[:,1:].sum(1)
+            if args.cuda:
+                label_mode, label_vec, segm_size = label_mode_cpu.cuda(), label_vec_cpu.float().cuda(), segm_size_cpu.float().cuda()
+            else:
+                label_mode, label_vec, segm_size = label_mode_cpu, label_vec_cpu.float(), segm_size_cpu.float()
+
+            optimizer.zero_grad()
+            timer.start(1)
+
+            embeddings = ptnCloudEmbedder.run(model, *clouds_data)
+            outputs = model.ecc(embeddings)
+            
+            loss = nn.functional.cross_entropy(outputs, Variable(label_mode), weight=dbinfo["class_weights"])
+
+            loss.backward()
+            ptnCloudEmbedder.bw_hook()
+
+            if args.grad_clip>0:
+                for p in model.parameters():
+                    p.grad.data.clamp_(-args.grad_clip, args.grad_clip)
+            optimizer.step()
+
+            timer.stop(1)
+            loss_meter.add(loss.item()) # pytorch 0.4
+
+            " Remove all nodes without ground truth "
+            o_cpu, t_cpu, tvec_cpu = filter_valid(outputs.data.cpu().numpy(), label_mode_cpu.numpy(), label_vec_cpu.numpy())
+
+            for i, label in enumerate(np.argmax(o_cpu, axis=1)):
+                confusionMatrix.addBatchPredictionVec(label, tvec_cpu[i, :])
+            confusionMatrixSpp.addPrediction(np.argmax(o_cpu, axis=1), t_cpu)
+            
+            #officialConfusionMatrix.count_predicted_batch(tvec_cpu, np.argmax(o_cpu,1))
+            # officialConfusionMatrix.get_average_intersection_union() == confusionMatrix.getAvgIoU()
+
+            #print(timer.getFormattedTimer(["Loader", "Trainer"]))
+            timer.reset()
+            timer.start(0)
+
+        #acc, loss, oacc, avg_iou
+        # acc = acc on spp
+        # oacc = acc on point
+        # avg_iou = iou on point
+        return loss_meter.value()[0], confusionMatrix, confusionMatrixSpp
+
+    ############
+    def eval(model, is_valid = False):
+        """ Evaluated model on test set """
+        model.eval()
+        
+        if is_valid: # validation dataset
+            loader = torch.utils.data.DataLoader(valid_dataset, batch_size=1, collate_fn=spg.eccpc_collate, num_workers=args.nworkers)
+        else: # test dataset
+            loader = torch.utils.data.DataLoader(test_dataset, batch_size=1, collate_fn=spg.eccpc_collate, num_workers=args.nworkers)
+            
+        if logging.getLogger().getEffectiveLevel() > logging.DEBUG: loader = tqdm(loader, ncols=65)
+
+        loss_meter = tnt.meter.AverageValueMeter()
+
+        #confusion_matrix = metrics.ConfusionMatrix(dbinfo['classes'])
+        confusionMatrix = ConfusionMatrix(dbinfo['classes'])
+        confusionMatrixSpp = ConfusionMatrix(dbinfo['classes'])
+
+        # DOOOOC
+        # tvec_cpu = groundtruth = [0:2000] with in each case [0:9] number of point for each label
+        # o_cpu    = predictions = [0:2000] one value for each prediction
+        # iterate over dataset in batches
+        for bidx, (targets, GIs, clouds_data) in enumerate(loader):
+            model.ecc.set_info(GIs, args.cuda)
+            label_mode_cpu, label_vec_cpu, segm_size_cpu = targets[:,0], targets[:,2:], targets[:,1:].sum(1).float()
+            if args.cuda:
+                label_mode, label_vec, segm_size = label_mode_cpu.cuda(), label_vec_cpu.float().cuda(), segm_size_cpu.float().cuda()
+            else:
+                label_mode, label_vec, segm_size = label_mode_cpu, label_vec_cpu.float(), segm_size_cpu.float()
+
+            embeddings = ptnCloudEmbedder.run(model, *clouds_data)
+            outputs = model.ecc(embeddings)
+            
+            loss = nn.functional.cross_entropy(outputs, Variable(label_mode), weight=dbinfo["class_weights"])
+            loss_meter.add(loss.item()) 
+
+            o_cpu, t_cpu, tvec_cpu = filter_valid(outputs.data.cpu().numpy(), label_mode_cpu.numpy(), label_vec_cpu.numpy())
+            if t_cpu.size > 0:
+                confusionMatrixSpp.addPrediction(np.argmax(o_cpu, axis=1), t_cpu)
+                for i, label in enumerate(np.argmax(o_cpu, axis=1)):
+                    confusionMatrix.addBatchPredictionVec(label, tvec_cpu[i, :])
+
+        return loss_meter.value()[0], confusionMatrix, confusionMatrixSpp
+
+    ############
+    def eval_final(model):
+        """ Evaluated model on test set in an extended way: computes estimates over multiple samples of point clouds and stores predictions """
+        model.eval()
+
+        acc_meter = tnt.meter.ClassErrorMeter(accuracy=True)
+        confusion_matrix = metrics.ConfusionMatrix(dbinfo['classes'])
+        collected, predictions = defaultdict(list), {}
+        rawPredictions = {}
+
+        # collect predictions over multiple sampling seeds
+        for ss in range(args.test_multisamp_n):
+            test_dataset_ss = create_dataset(args, pathManager, i, ss)[1]
+            loader = torch.utils.data.DataLoader(test_dataset_ss, batch_size=1, collate_fn=spg.eccpc_collate, num_workers=args.nworkers)
+            if logging.getLogger().getEffectiveLevel() > logging.DEBUG: loader = tqdm(loader, ncols=65)
+
+            # iterate over dataset in batches
+            for bidx, (targets, GIs, clouds_data) in enumerate(loader):
+                model.ecc.set_info(GIs, args.cuda)
+                label_mode_cpu, label_vec_cpu, segm_size_cpu = targets[:,0], targets[:,2:], targets[:,1:].sum(1).float()
+
+                embeddings = ptnCloudEmbedder.run(model, *clouds_data)
+                outputs = model.ecc(embeddings)
+
+                fname = clouds_data[0][0][:clouds_data[0][0].rfind('.')]
+                collected[fname].append((outputs.data.cpu().numpy(), label_mode_cpu.numpy(), label_vec_cpu.numpy()))
+
+        # aggregate predictions (mean)
+        for fname, lst in collected.items():
+            # o_cpu    = PREDICTIONS with probability
+            # tvec_cpu = ground truth
+            o_cpu, t_cpu, tvec_cpu = list(zip(*lst))
+            if args.test_multisamp_n > 1:
+                o_cpu = np.mean(np.stack(o_cpu,0),0)
+            else:
+                o_cpu = o_cpu[0]
+            t_cpu, tvec_cpu = t_cpu[0], tvec_cpu[0]
+            predictions[fname] = np.argmax(o_cpu,1)
+            rawPredictions[fname] = o_cpu
+            o_cpu, t_cpu, tvec_cpu = filter_valid(o_cpu, t_cpu, tvec_cpu)
+            if t_cpu.size > 0:
+                acc_meter.add(o_cpu, t_cpu)
+                confusion_matrix.count_predicted_batch(tvec_cpu, np.argmax(o_cpu,1))
+
+        per_class_iou = {}
+        perclsiou = confusion_matrix.get_intersection_union_per_class()
+        for c, name in dbinfo['inv_class_map'].items():
+            try:
+                per_class_iou[name] = perclsiou[c]
+            except IndexError:
+                print("Missing one label in data: " + name)
+
+        return meter_value(acc_meter), confusion_matrix.get_overall_accuracy(), confusion_matrix.get_average_intersection_union(), per_class_iou, predictions,  confusion_matrix.get_mean_class_accuracy(), confusion_matrix.confusion_matrix, rawPredictions
+
+
+    ############
+    # Training loop
+    TRAIN_COLOR = '\x1b[96;1m'
+    VAL_COLOR =   '\x1b[94;1m' 
+    TEST_COLOR =  '\x1b[96;1m' 
+    BEST_COLOR =  '\x1b[93;7m'
+    BAD_COLOR =   '\x1b[91;7m'
+    IOU_COLOR =   '\x1b[33;1m'
+    CLOSE =       '\x1b[0m'
+    epoch = args.start_epoch
+    best_iou = 0
+
+    import custom_dataset
+    dbinfo = custom_dataset.get_info(args)
+    print("Read dataset")
+    create_dataset = custom_dataset.get_datasets
+
+    classNames = list(ColorLabelManager().label2Name.values())[1:] # Without "unknown"
+
+    args.start_epoch = 0
+    # Create model and optimizer
+    if args.resume and os.path.isfile(pathManager.getModelFile(i)):
+        model, optimizer = resume(args, dbinfo, pathManager.getModelFile(i))
+    else:
+        print("Setup CUDA model")
+        model = create_model(args, dbinfo)
+        optimizer = create_optimizer(args, model)
+
+    train_dataset, test_dataset, valid_dataset, scaler = create_dataset(args, pathManager, 0)
+
+    print('Train dataset: %i elements - Test dataset: %i elements - Validation dataset: %i elements' % (len(train_dataset),len(test_dataset),len(valid_dataset)))
+    ptnCloudEmbedder = pointnet.CloudEmbedder(args)
+    scheduler = MultiStepLR(optimizer, milestones=args.lr_steps, gamma=args.lr_decay, last_epoch=args.start_epoch-1)
+
+    " Epoch is number of time you parse all data "
+    for epoch in range(args.start_epoch, args.epochs+1):
+
+        firstEpoch = (epoch==args.start_epoch)
+        print('#################')
+        print('Epoch {}/{} ({}):'.format(epoch, args.epochs, args.ROOT_PATH))
+
+        " Update tensor if grad is computed "
+        scheduler.step() 
+
+        isEvalEpoch = (epoch % args.eval_nth_epoch == 0)
+        isSaveEpoch = (epoch % args.save_nth_epoch == 0)
+
+        # 1. Train
+        loss_train, CM_train_pt, CM_train_spp = train(model)
+        print(TRAIN_COLOR + '-> Train Loss: %1.4f' % (loss_train) + CLOSE)
+        if math.isnan(loss_train): break
+
+        saveResult(epoch, loss_train, CM_train_pt, CM_train_spp, pathManager.getTrainingCsvReport("train", i))
+
+        # 2. Evaluation
+        if firstEpoch or isEvalEpoch:
+            loss_test, CM_test_pt, CM_test_spp = eval(model, False)
+            saveResult(epoch, loss_test, CM_test_pt, CM_test_spp, pathManager.getTrainingCsvReport("test", i))
+
+            loss_val, CM_val_pt, CM_val_spp = eval(model, True)
+            if args.only_best:
+                isBest = CM_val_pt.getAvgIoU() > best_iou or epoch < 5
+                if isBest:
+                    print(BEST_COLOR + 'New best model achieved!' + CLOSE)
+                    best_iou = CM_val_pt.getAvgIoU() 
+                    saveResult(epoch, loss_val, CM_val_pt, CM_val_spp, pathManager.getTrainingCsvReport("validation", i))
+                    torch.save({'epoch': epoch + 1, 'args': args, 'state_dict': model.state_dict(), 'optimizer' : optimizer.state_dict(), 'scaler': scaler}, pathManager.getModelFile(i))
+                else:
+                    print(BAD_COLOR + 'Bad model' + CLOSE)
+                    args.resume = pathManager.getModelFile(i) 
+                    model, optimizer = resume(args, dbinfo, pathManager.getModelFile(i))
+                    io.duplicateLastLineCsv(pathManager.getTrainingCsvReport("validation", i), int(epoch))
+            else:
+                saveResult(epoch, loss_val, CM_val_pt, CM_val_spp, pathManager.getTrainingCsvReport("validation", i))
+
+            print(VAL_COLOR + 'Validation -> loss: %1.4f,  acc pt: %3.2f%%,  acc spp: %3.2f%%,  avgIoU: %3.2f%%' % (loss_val, CM_val_pt.getAccuracy()*100, CM_val_spp.getAccuracy()*100, CM_val_pt.getAvgIoU()*100) + CLOSE)
+            print(IOU_COLOR + 'IoU: %3.2f%%' % (CM_test_pt.getAvgIoU()*100) + CLOSE)
+            print(TEST_COLOR + 'Test       -> loss: %1.4f,  acc pt: %3.2f%%,  acc spp: %3.2f%%,  avgIoU: %3.2f%%' % (loss_test, CM_test_pt.getAccuracy()*100, CM_test_spp.getAccuracy()*100, CM_test_pt.getAvgIoU()*100) + CLOSE)
+
+        if isSaveEpoch and not args.only_best:
+            torch.save({'epoch': epoch + 1, 'args': args, 'state_dict': model.state_dict(), 'optimizer' : optimizer.state_dict(), 'scaler': scaler}, pathManager.getModelFile(i))
+
+
+    # 8. Final evaluation
+    if args.start_epoch < args.epochs and args.test_multisamp_n>0 and 'test' in args.db_test_name:
+        acc_test, oacc_test, avg_iou_test, per_class_iou_test, predictions_test, avg_acc_test, confusion_matrix, rawPredictions = eval_final(model)
+        with h5py.File(pathManager.getPredictionFile(i), 'w') as hf:
+            for fname, o_cpu in predictions_test.items():
+                hf.create_dataset(name=fname, data=o_cpu) #(0-based classes)
+
+        with h5py.File(pathManager.getRawPredictionFile(i), 'w') as hf:
+            for fname, o_cpu in rawPredictions.items():
+                hf.create_dataset(name=fname, data=o_cpu) #(0-based classes)
+
+        print('-> Multisample {}: Test accuracy: {}, \tTest oAcc: {}, \tTest avgIoU: {}, \tTest mAcc: {}'.format(args.test_multisamp_n, acc_test, oacc_test, avg_iou_test, avg_acc_test))
+
+
 def main(args):
     parser = argparse.ArgumentParser(description='Large-scale Point Cloud Semantic Segmentation with Superpoint Graphs')
 
     parser.add_argument('ROOT_PATH', help='name of the folder containing the data directory')
     # parser.add_argument('MODEL_NAME', help='Loads a pretrained model.')
+
+    parser.add_argument('--parallel', action='store_true', help='Choose if validation dataset is the same than test dataset')
 
     # Optimization arguments
     parser.add_argument('--wd', default=0, type=float, help='Weight decay')
@@ -158,285 +444,23 @@ def main(args):
     #if args.use_pyg:
     #    torch.backends.cudnn.enabled = False
 
-    import custom_dataset
-    dbinfo = custom_dataset.get_info(args)
-    print("Read dataset")
-    create_dataset = custom_dataset.get_datasets
+    #### MAIN ####
 
-    # Create model and optimizer
-    if args.resume and os.path.isfile(pathManager.modelFile):
-        model, optimizer = resume(args, dbinfo, pathManager.modelFile)
+    if args.parallel:
+        print("Paralell computation activated")
+        with multiprocessing.Pool(multiprocessing.cpu_count()) as pool:    
+            proc = []
+            for i in range(pathManager.getNbRun()):
+                proc.append(pool.apply_async(fullTrainingLoop, (args, pathManager, i,)))
+            for pr in proc:
+                pr.get()
     else:
-        print("Setup CUDA model")
-        model = create_model(args, dbinfo)
-        optimizer = create_optimizer(args, model)
+        print("Sequential computation")
+        for i in range(pathManager.getNbRun()):
+            fullTrainingLoop(i)
 
-    train_dataset, test_dataset, valid_dataset, scaler = create_dataset(args)
-
-    print('Train dataset: %i elements - Test dataset: %i elements - Validation dataset: %i elements' % (len(train_dataset),len(test_dataset),len(valid_dataset)))
-    ptnCloudEmbedder = pointnet.CloudEmbedder(args)
-    scheduler = MultiStepLR(optimizer, milestones=args.lr_steps, gamma=args.lr_decay, last_epoch=args.start_epoch-1)
-
-
-    ############
-    def train():
-        """ Trains for one epoch """
-        model.train()
-
-        " collate_fn = function called on each sample per batch in order to concatenate them into a single batch "
-        " batch_size = number of sample i.e spg, per batch, default value is 2 "
-        loader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size, collate_fn=spg.eccpc_collate, num_workers=args.nworkers, shuffle=True, drop_last=True)
-        if logging.getLogger().getEffectiveLevel() > logging.DEBUG: loader = tqdm(loader, ncols=65)
-
-        # tnt.meter.AverageValueMeter() --> just average a value
-        loss_meter = tnt.meter.AverageValueMeter()
-
-        # Official confusion matrix from semantic3D
-        #officialConfusionMatrix = metrics.ConfusionMatrix(dbinfo['classes'])
-
-        # Custom confusion matrix
-        confusionMatrix = ConfusionMatrix(dbinfo['classes'])
-        confusionMatrixSpp = ConfusionMatrix(dbinfo['classes'])
-
-        timer = Timer(2)
-        timer.start(0)
-
-        # iterate over dataset in batches
-        for targets, GIs, clouds_data in loader:
-            timer.stop(0)
-
-            model.ecc.set_info(GIs, args.cuda)
-            " Here label_mode is the ground truth, stored on the first column of targets"
-            " label_vec_cpu is how many points of each class has been classified, usefull later for confusion matrix, start from 2: cause 1: is unknown label "
-            " segm_size_cpu is the total amount of points on the point cloud, unknown included "
-            label_mode_cpu, label_vec_cpu, segm_size_cpu = targets[:,0], targets[:,2:], targets[:,1:].sum(1)
-            if args.cuda:
-                label_mode, label_vec, segm_size = label_mode_cpu.cuda(), label_vec_cpu.float().cuda(), segm_size_cpu.float().cuda()
-            else:
-                label_mode, label_vec, segm_size = label_mode_cpu, label_vec_cpu.float(), segm_size_cpu.float()
-
-            optimizer.zero_grad()
-            timer.start(1)
-
-            embeddings = ptnCloudEmbedder.run(model, *clouds_data)
-            outputs = model.ecc(embeddings)
-            
-            loss = nn.functional.cross_entropy(outputs, Variable(label_mode), weight=dbinfo["class_weights"])
-
-            loss.backward()
-            ptnCloudEmbedder.bw_hook()
-
-            if args.grad_clip>0:
-                for p in model.parameters():
-                    p.grad.data.clamp_(-args.grad_clip, args.grad_clip)
-            optimizer.step()
-
-            timer.stop(1)
-            loss_meter.add(loss.item()) # pytorch 0.4
-
-            " Remove all nodes without ground truth "
-            o_cpu, t_cpu, tvec_cpu = filter_valid(outputs.data.cpu().numpy(), label_mode_cpu.numpy(), label_vec_cpu.numpy())
-
-            for i, label in enumerate(np.argmax(o_cpu, axis=1)):
-                confusionMatrix.addBatchPredictionVec(label, tvec_cpu[i, :])
-            confusionMatrixSpp.addPrediction(np.argmax(o_cpu, axis=1), t_cpu)
-            
-            #officialConfusionMatrix.count_predicted_batch(tvec_cpu, np.argmax(o_cpu,1))
-            # officialConfusionMatrix.get_average_intersection_union() == confusionMatrix.getAvgIoU()
-
-            #print(timer.getFormattedTimer(["Loader", "Trainer"]))
-            timer.reset()
-            timer.start(0)
-
-        #acc, loss, oacc, avg_iou
-        # acc = acc on spp
-        # oacc = acc on point
-        # avg_iou = iou on point
-        return loss_meter.value()[0], confusionMatrix, confusionMatrixSpp
-
-    ############
-    def eval(is_valid = False):
-        """ Evaluated model on test set """
-        model.eval()
-        
-        if is_valid: # validation dataset
-            loader = torch.utils.data.DataLoader(valid_dataset, batch_size=1, collate_fn=spg.eccpc_collate, num_workers=args.nworkers)
-        else: # test dataset
-            loader = torch.utils.data.DataLoader(test_dataset, batch_size=1, collate_fn=spg.eccpc_collate, num_workers=args.nworkers)
-            
-        if logging.getLogger().getEffectiveLevel() > logging.DEBUG: loader = tqdm(loader, ncols=65)
-
-        loss_meter = tnt.meter.AverageValueMeter()
-
-        #confusion_matrix = metrics.ConfusionMatrix(dbinfo['classes'])
-        confusionMatrix = ConfusionMatrix(dbinfo['classes'])
-        confusionMatrixSpp = ConfusionMatrix(dbinfo['classes'])
-
-        # DOOOOC
-        # tvec_cpu = groundtruth = [0:2000] with in each case [0:9] number of point for each label
-        # o_cpu    = predictions = [0:2000] one value for each prediction
-        # iterate over dataset in batches
-        for bidx, (targets, GIs, clouds_data) in enumerate(loader):
-            model.ecc.set_info(GIs, args.cuda)
-            label_mode_cpu, label_vec_cpu, segm_size_cpu = targets[:,0], targets[:,2:], targets[:,1:].sum(1).float()
-            if args.cuda:
-                label_mode, label_vec, segm_size = label_mode_cpu.cuda(), label_vec_cpu.float().cuda(), segm_size_cpu.float().cuda()
-            else:
-                label_mode, label_vec, segm_size = label_mode_cpu, label_vec_cpu.float(), segm_size_cpu.float()
-
-            embeddings = ptnCloudEmbedder.run(model, *clouds_data)
-            outputs = model.ecc(embeddings)
-            
-            loss = nn.functional.cross_entropy(outputs, Variable(label_mode), weight=dbinfo["class_weights"])
-            loss_meter.add(loss.item()) 
-
-            o_cpu, t_cpu, tvec_cpu = filter_valid(outputs.data.cpu().numpy(), label_mode_cpu.numpy(), label_vec_cpu.numpy())
-            if t_cpu.size > 0:
-                confusionMatrixSpp.addPrediction(np.argmax(o_cpu, axis=1), t_cpu)
-                for i, label in enumerate(np.argmax(o_cpu, axis=1)):
-                    confusionMatrix.addBatchPredictionVec(label, tvec_cpu[i, :])
-
-        return loss_meter.value()[0], confusionMatrix, confusionMatrixSpp
-
-    ############
-    def eval_final():
-        """ Evaluated model on test set in an extended way: computes estimates over multiple samples of point clouds and stores predictions """
-        model.eval()
-
-        acc_meter = tnt.meter.ClassErrorMeter(accuracy=True)
-        confusion_matrix = metrics.ConfusionMatrix(dbinfo['classes'])
-        collected, predictions = defaultdict(list), {}
-        rawPredictions = {}
-
-        # collect predictions over multiple sampling seeds
-        for ss in range(args.test_multisamp_n):
-            test_dataset_ss = create_dataset(args, ss)[1]
-            loader = torch.utils.data.DataLoader(test_dataset_ss, batch_size=1, collate_fn=spg.eccpc_collate, num_workers=args.nworkers)
-            if logging.getLogger().getEffectiveLevel() > logging.DEBUG: loader = tqdm(loader, ncols=65)
-
-            # iterate over dataset in batches
-            for bidx, (targets, GIs, clouds_data) in enumerate(loader):
-                model.ecc.set_info(GIs, args.cuda)
-                label_mode_cpu, label_vec_cpu, segm_size_cpu = targets[:,0], targets[:,2:], targets[:,1:].sum(1).float()
-
-                embeddings = ptnCloudEmbedder.run(model, *clouds_data)
-                outputs = model.ecc(embeddings)
-
-                fname = clouds_data[0][0][:clouds_data[0][0].rfind('.')]
-                collected[fname].append((outputs.data.cpu().numpy(), label_mode_cpu.numpy(), label_vec_cpu.numpy()))
-
-        # aggregate predictions (mean)
-        for fname, lst in collected.items():
-            # o_cpu    = PREDICTIONS with probability
-            # tvec_cpu = ground truth
-            o_cpu, t_cpu, tvec_cpu = list(zip(*lst))
-            if args.test_multisamp_n > 1:
-                o_cpu = np.mean(np.stack(o_cpu,0),0)
-            else:
-                o_cpu = o_cpu[0]
-            t_cpu, tvec_cpu = t_cpu[0], tvec_cpu[0]
-            predictions[fname] = np.argmax(o_cpu,1)
-            rawPredictions[fname] = o_cpu
-            o_cpu, t_cpu, tvec_cpu = filter_valid(o_cpu, t_cpu, tvec_cpu)
-            if t_cpu.size > 0:
-                acc_meter.add(o_cpu, t_cpu)
-                confusion_matrix.count_predicted_batch(tvec_cpu, np.argmax(o_cpu,1))
-
-        per_class_iou = {}
-        perclsiou = confusion_matrix.get_intersection_union_per_class()
-        for c, name in dbinfo['inv_class_map'].items():
-            try:
-                per_class_iou[name] = perclsiou[c]
-            except IndexError:
-                print("Missing one label in data: " + name)
-
-        return meter_value(acc_meter), confusion_matrix.get_overall_accuracy(), confusion_matrix.get_average_intersection_union(), per_class_iou, predictions,  confusion_matrix.get_mean_class_accuracy(), confusion_matrix.confusion_matrix, rawPredictions
-
-    ############
-    # Training loop
-    best_iou = 0
-    TRAIN_COLOR = '\x1b[96;1m'
-    VAL_COLOR =   '\x1b[94;1m' 
-    TEST_COLOR =  '\x1b[96;1m' 
-    BEST_COLOR =  '\x1b[93;7m'
-    BAD_COLOR =   '\x1b[91;7m'
-    IOU_COLOR =   '\x1b[33;1m'
-    CLOSE =       '\x1b[0m'
-    epoch = args.start_epoch
-
-    classNames = list(ColorLabelManager().label2Name.values())[1:] # Without "unknown"
-    def rename(l, name):
-        return [name + i for i in l]
-
-    def saveResult(epoch, loss, CM_pt, CM_spp, reportPath):
-        acc_pt, avg_iou, avg_prec, avg_rec, iou_per_class, prec_per_class, rec_per_class = CM_pt.getStats()
-        acc_spp = CM_spp.getAccuracy()
-        header = ["epoch", "acc_pt", "acc_spp", "loss", "avg_iou", "avg_prec", "avg_rec"] + rename(classNames, "avg_iou_") + rename(classNames, "avg_prec_") + rename(classNames, "avg_rec_")
-        data = np.concatenate([[int(epoch), acc_pt, acc_spp, loss, avg_iou, avg_prec, avg_rec], iou_per_class, prec_per_class, rec_per_class])
-        io.writeCsv(reportPath, header, data)
+    ### MEAN ALL STATS ###
     
-    " Epoch is number of time you parse all data "
-    for epoch in range(args.start_epoch, args.epochs):
-
-        firstEpoch = (epoch==args.start_epoch)
-        print('#################')
-        print('Epoch {}/{} ({}):'.format(epoch, args.epochs, args.ROOT_PATH))
-
-        " Update tensor if grad is computed "
-        scheduler.step() 
-
-        isEvalEpoch = (epoch % args.eval_nth_epoch == 0)
-        isSaveEpoch = (epoch % args.save_nth_epoch == 0)
-
-        # 1. Train
-        loss_train, CM_train_pt, CM_train_spp = train()
-        print(TRAIN_COLOR + '-> Train Loss: %1.4f' % (loss_train) + CLOSE)
-        if math.isnan(loss_train): break
-
-        saveResult(epoch, loss_train, CM_train_pt, CM_train_spp, pathManager.getTrainingCsvReport("train"))
-
-        # 2. Evaluation
-        if firstEpoch or isEvalEpoch:
-            loss_test, CM_test_pt, CM_test_spp = eval(False)
-            saveResult(epoch, loss_test, CM_test_pt, CM_test_spp, pathManager.getTrainingCsvReport("test"))
-
-            loss_val, CM_val_pt, CM_val_spp = eval(True)
-            if args.only_best:
-                isBest = CM_val_pt.getAvgIoU() > best_iou or epoch < 5
-                if isBest:
-                    print(BEST_COLOR + 'New best model achieved!' + CLOSE)
-                    best_iou = CM_val_pt.getAvgIoU() 
-                    saveResult(epoch, loss_val, CM_val_pt, CM_val_spp, pathManager.getTrainingCsvReport("validation"))
-                    torch.save({'epoch': epoch + 1, 'args': args, 'state_dict': model.state_dict(), 'optimizer' : optimizer.state_dict(), 'scaler': scaler}, pathManager.modelFile)
-                else:
-                    print(BAD_COLOR + 'Bad model' + CLOSE)
-                    args.resume = pathManager.modelFile 
-                    model, optimizer = resume(args, dbinfo, pathManager.modelFile)
-                    io.duplicateLastLineCsv(pathManager.getTrainingCsvReport("validation"), int(epoch))
-            else:
-                saveResult(epoch, loss_val, CM_val_pt, CM_val_spp, pathManager.getTrainingCsvReport("validation"))
-
-            print(VAL_COLOR + 'Validation -> loss: %1.4f,  acc pt: %3.2f%%,  acc spp: %3.2f%%,  avgIoU: %3.2f%%' % (loss_val, CM_val_pt.getAccuracy()*100, CM_val_spp.getAccuracy()*100, CM_val_pt.getAvgIoU()*100) + CLOSE)
-            print(IOU_COLOR + 'IoU: %3.2f%%' % (CM_test_pt.getAvgIoU()*100) + CLOSE)
-            print(TEST_COLOR + 'Test       -> loss: %1.4f,  acc pt: %3.2f%%,  acc spp: %3.2f%%,  avgIoU: %3.2f%%' % (loss_test, CM_test_pt.getAccuracy()*100, CM_test_spp.getAccuracy()*100, CM_test_pt.getAvgIoU()*100) + CLOSE)
-
-        if isSaveEpoch and not args.only_best:
-            torch.save({'epoch': epoch + 1, 'args': args, 'state_dict': model.state_dict(), 'optimizer' : optimizer.state_dict(), 'scaler': scaler}, pathManager.modelFile)
-
-
-    # 8. Final evaluation
-    if args.test_multisamp_n>0 and 'test' in args.db_test_name:
-        acc_test, oacc_test, avg_iou_test, per_class_iou_test, predictions_test, avg_acc_test, confusion_matrix, rawPredictions = eval_final()
-        with h5py.File(pathManager.predictionFile, 'w') as hf:
-            for fname, o_cpu in predictions_test.items():
-                hf.create_dataset(name=fname, data=o_cpu) #(0-based classes)
-
-        with h5py.File(pathManager.rawPredictionFile, 'w') as hf:
-            for fname, o_cpu in rawPredictions.items():
-                hf.create_dataset(name=fname, data=o_cpu) #(0-based classes)
-
-        print('-> Multisample {}: Test accuracy: {}, \tTest oAcc: {}, \tTest avgIoU: {}, \tTest mAcc: {}'.format(args.test_multisamp_n, acc_test, oacc_test, avg_iou_test, avg_acc_test))
-
 def resume(args, dbinfo, modelFile):
     """ Loads model and optimizer state from a previous checkpoint. """
     print("=> loading checkpoint '{}'".format(args.resume))
