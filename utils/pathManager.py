@@ -132,3 +132,6 @@ class PathManager :
 
     def getTrainingCsvReport(self, dataset, i):
         return self.trainingReportPath + "/" + str(i) + "/" + dataset  + "Stats.csv"
+
+    def getMeanTrainingCsvReport(self, dataset):
+        return self.trainingReportPath + "/" + dataset + "Stats.csv"

@@ -24,6 +24,7 @@ import h5py
 import cloudIO as io
 #from IPython.core.debugger import set_trace
 import multiprocessing
+import pandas as pd
 
 import torch
 import torch.nn as nn
@@ -460,7 +461,23 @@ def main(args):
             fullTrainingLoop(i)
 
     ### MEAN ALL STATS ###
-    
+    nbRun = pathManager.getNbRun()
+    allCsvFiles = defaultdict(list) 
+    for i in range(nbRun):
+        for dataset in ["train", "test", "validation"]:
+            file = pathManager.getTrainingCsvReport(dataset, i)
+            if os.path.isfile(file):
+                allCsvFiles[dataset].append(pd.read_csv(file, index_col=False, na_values='nan', sep=';'))
+                #allCsvFiles[dataset].append(file)
+
+    means = {}
+    for dataset in ["train", "test", "validation"]:
+        means[dataset] = allCsvFiles[dataset][0]
+        for data in allCsvFiles[dataset][1:]:
+            means[dataset] += data
+        means[dataset] /= float(pathManager.getNbRun()) 
+        means[dataset].to_csv(pathManager.getMeanTrainingCsvReport(dataset), index=False, na_rep='nan', sep=';')
+
 def resume(args, dbinfo, modelFile):
     """ Loads model and optimizer state from a previous checkpoint. """
     print("=> loading checkpoint '{}'".format(args.resume))
