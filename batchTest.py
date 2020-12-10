@@ -9,7 +9,8 @@ from visualize_result import main as visualize
 from train import main as train 
 import pandas as pd
 import csv
-import multiprocessing
+import torch.multiprocessing as multiprocessing
+multiprocessing.set_start_method('spawn', force=True)
 from mpi4py import MPI
 import time
 from timer import Timer
@@ -81,7 +82,7 @@ def main(args):
             "--lambda_edge_weight" : float(1.),
             "--reg_strength" : float(0.01),
             "--d_se_max" : 0,
-            "--voxel_width" : float(0.03),
+            "--voxel_width" : float(0.01),
             "--validationIsTest" :"none",
             "--voxelize" :"none",
             "--parallel" : "none"
@@ -101,9 +102,9 @@ def main(args):
     except FileExistsError:
         print("Project already exist, scan to complete")
 
-    superpointComputation(sppArgs.toList() + ["--format", "laz"])
+    #superpointComputation(sppArgs.toList() + ["--format", "laz"])
     if not args.preproc_only:
-        train([sppArgs.getProjectPath(), "--epoch", "10", "--resume", "--only_best", "--parallel"])
+        train([sppArgs.getProjectPath(), "--epoch", "300", "--resume", "--batch_size", "6"])
         visualize([sppArgs.getProjectPath(), "LPA3-1", "--outType", "spctgde", "--format", "laz"])
     else:
         visualize([sppArgs.getProjectPath(), "LPA3-1", "--outType", "sgde", "--format", "laz"])

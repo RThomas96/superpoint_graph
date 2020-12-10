@@ -13,14 +13,13 @@ sys.path.append("./partition/")
 sys.path.append("./utils")
 from plyfile import PlyData, PlyElement
 from pathlib import Path
-import provider
+import cloudIO
 import os
 from os import listdir
 from os.path import isfile, join
 from colorLabelManager import ColorLabelManager
 
 sys.path.append("./supervized_partition/")
-import graph_processing as graph
 
 def countNbPtPerLabel(labels, nbLabels):
     res = np.zeros(nbLabels+1)
@@ -34,30 +33,38 @@ parser.add_argument('--supervized', action='store_true', help='Wether to read ex
 args = parser.parse_args()
 
 #---path to data---------------------------------------------------------------
-root = os.path.dirname(os.path.realpath(__file__)) + '/../projects/' + args.ROOT_PATH
-fea_path = root + "/features"
-supervized_fea_path = root + "/features_supervized"
+root = os.path.dirname(os.path.realpath(__file__)) + '/../../projects/' + args.ROOT_PATH
+spg_path = root + "/superpoint_graphs"
+fea_path   = root + "/features"
 
 colorManager = ColorLabelManager()
 nbLabel = colorManager.nbColor
 
-if args.supervized:
-    allFiles = [supervized_fea_path + "/test/" + f for f in listdir(supervized_fea_path + "/test") if isfile(join(supervized_fea_path + "/test", f))]
-    allFiles += [supervized_fea_path + "/train/" + f for f in listdir(supervized_fea_path + "/train") if isfile(join(supervized_fea_path + "/train", f))]
-else:
-    allFiles = [fea_path + "/test/" + f for f in listdir(fea_path + "/test") if isfile(join(fea_path + "/test", f))]
-    allFiles += [fea_path + "/train/" + f for f in listdir(fea_path + "/train") if isfile(join(fea_path + "/train", f))]
+allFeaFiles = [fea_path + "/"  + f for f in listdir(fea_path) if isfile(join(fea_path, f))]
+allSpgFiles = [spg_path + "/" + f for f in listdir(spg_path) if isfile(join(spg_path, f))]
 
 finalStat = np.zeros(nbLabel+1)
+for i, filename in enumerate(allFeaFiles):
+    name, extention = os.path.splitext(os.path.basename(filename))
+    if extention != ".h5":
+        continue
+    print("Start counting " + name)
 
-if args.supervized:
-    for filename in allFiles:
-        xyz, rgb, edg_source, edg_target, is_transition, local_geometry, labels, objects, elevation, xyn = graph.read_structure(filename, False)
-        finalStat += countNbPtPerLabel(labels, nbLabel)
-else:
-    for filename in allFiles:
-        geof, xyz, rgb, graph_nn, labels = provider.read_features(fea_file)
-        finalStat += countNbPtPerLabel(labels, nbLabel)
+    geof, xyz, rgb, graph_nn, labels = cloudIO.read_features(filename)
+    try:
+        graph_spg, components, in_component = cloudIO.read_spg(allSpgFiles[i])
+    except IndexError:
+        print("Bad opening, search")
+        for idx, spgName in enumerate(allSpgFiles):
+            spgname, spgextention = os.path.splitext(os.path.basename(spgName))
+            if spgname == name:
+                graph_spg, components, in_component = cloudIO.read_spg(allSpgFiles[idx])
+                break
+
+    labelEachSpp = np.array([np.bincount(labels[x]).argmax() for x in components])
+    for i, x in enumerate(np.bincount(labelEachSpp)):
+        finalStat[i] += x 
+
 
 totalNumber = finalStat.sum()
 perc = (finalStat / totalNumber)*100

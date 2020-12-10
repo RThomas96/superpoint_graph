@@ -13,14 +13,13 @@ sys.path.append("./partition/")
 sys.path.append("./utils")
 from plyfile import PlyData, PlyElement
 from pathlib import Path
-import provider
+import cloudIO as provider
 import os
 from os import listdir
 from os.path import isfile, join
 from colorLabelManager import ColorLabelManager
 
 sys.path.append("./supervized_partition/")
-import graph_processing as graph
 
 parser = argparse.ArgumentParser(description='Generate ply file from prediction file')
 parser.add_argument('ROOT_PATH', help='Folder name which contains data')
@@ -30,18 +29,16 @@ parser.add_argument('--name', default='', help='If a superpoint has less pt than
 args = parser.parse_args()
 
 #---path to data---------------------------------------------------------------
-root = os.path.dirname(os.path.realpath(__file__)) + '/../projects/' + args.ROOT_PATH
+root = os.path.dirname(os.path.realpath(__file__)) + '/../../projects/' + args.ROOT_PATH
 spg_path = root + "/superpoint_graphs"
 fea_path   = root + "/features"
 
 colorManager = ColorLabelManager()
 nbLabel = colorManager.nbColor
 
-allFeaFiles = [fea_path + "/test/" + f for f in listdir(fea_path + "/test") if isfile(join(fea_path + "/test", f))]
-allFeaFiles += [fea_path + "/train/" + f for f in listdir(fea_path + "/train") if isfile(join(fea_path + "/train", f))]
+allFeaFiles = [fea_path + "/"  + f for f in listdir(fea_path) if isfile(join(fea_path, f))]
 
-allSpgFiles = [spg_path + "/test/" + f for f in listdir(spg_path + "/test") if isfile(join(spg_path + "/test", f))]
-allSpgFiles += [spg_path + "/train/" + f for f in listdir(spg_path + "/train") if isfile(join(spg_path + "/train", f))]
+allSpgFiles = [spg_path + "/" + f for f in listdir(spg_path) if isfile(join(spg_path, f))]
 
 filterByName = False
 if args.name != '':
@@ -59,6 +56,7 @@ for i, filename in enumerate(allFeaFiles):
     try:
         graph_spg, components, in_component = provider.read_spg(allSpgFiles[i])
     except IndexError:
+        print("Bad opening, search")
         for idx, spgName in enumerate(allSpgFiles):
             spgname, spgextention = os.path.splitext(os.path.basename(spgName))
             if spgname == name:

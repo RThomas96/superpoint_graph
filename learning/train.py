@@ -23,7 +23,8 @@ from collections import defaultdict
 import h5py
 import cloudIO as io
 #from IPython.core.debugger import set_trace
-import multiprocessing
+import torch.multiprocessing as multiprocessing
+multiprocessing.set_start_method('spawn', force=True)
 import pandas as pd
 
 import torch
@@ -343,13 +344,13 @@ def main(args):
     parser.add_argument('--wd', default=0, type=float, help='Weight decay')
     parser.add_argument('--lr', default=1e-2, type=float, help='Initial learning rate')
     parser.add_argument('--lr_decay', default=0.7, type=float, help='Multiplicative factor used on learning rate at `lr_steps`')
-    parser.add_argument('--lr_steps', default='[30, 50, 70, 100, 200]', help='List of epochs where the learning rate is decreased by `lr_decay`')
+    parser.add_argument('--lr_steps', default='[200, 400, 600]', help='List of epochs where the learning rate is decreased by `lr_decay`')
     parser.add_argument('--momentum', default=0.9, type=float, help='Momentum')
     parser.add_argument('--epochs', default=10, type=int, help='Number of epochs to train. If <=0, only testing will be done.')
-    parser.add_argument('--batch_size', default=1, type=int, help='Batch size')
+    parser.add_argument('--batch_size', default=3, type=int, help='Batch size')
     parser.add_argument('--optim', default='adam', help='Optimizer: sgd|adam')
     parser.add_argument('--grad_clip', default=1, type=float, help='Element-wise clipping of gradient. If 0, does not clip')
-    parser.add_argument('--loss_weights', default='none', help='[none, proportional, sqrt] how to weight the loss function')
+    parser.add_argument('--loss_weights', default='proportional', help='[none, proportional, sqrt] how to weight the loss function')
 
     # Learning process arguments
     parser.add_argument('--cuda', default=1, type=int, help='Bool, use cuda')
@@ -409,11 +410,13 @@ def main(args):
     # All superpoints with less than this amount of point rely solely on contextual classification
     parser.add_argument('--ptn_minpts', default=40, type=int, help='Minimum number of points in a superpoint for computing its embedding.')
     # All superpoints are resampled to this size for pointnet
+    # CHANGED
     parser.add_argument('--ptn_npts', default=128, type=int, help='Number of input points for PointNet.')
     # Pointnet layer configuration
     parser.add_argument('--ptn_widths', default='[[64,64,128,128,256], [256,64,32]]', help='PointNet widths')
     parser.add_argument('--ptn_widths_stn', default='[[64,64,128], [128,64]]', help='PointNet\'s Transformer widths')
-    parser.add_argument('--ptn_nfeat_stn', default=11, type=int, help='PointNet\'s Transformer number of input features')
+    #CHANGED
+    parser.add_argument('--ptn_nfeat_stn', default=14, type=int, help='PointNet\'s Transformer number of input features')
     parser.add_argument('--ptn_prelast_do', default=0, type=float)
     parser.add_argument('--ptn_mem_monger', default=1, type=int, help='Bool, save GPU memory by recomputing PointNets in back propagation.')
 
@@ -448,8 +451,8 @@ def main(args):
     #### MAIN ####
 
     if args.parallel:
-        print("Paralell computation activated")
-        with multiprocessing.Pool(multiprocessing.cpu_count()) as pool:    
+        print("Paralell training activated")
+        with multiprocessing.Pool(4) as pool:    
             proc = []
             for i in range(pathManager.getNbRun()):
                 proc.append(pool.apply_async(fullTrainingLoop, (args, pathManager, i,)))
@@ -458,15 +461,17 @@ def main(args):
     else:
         print("Sequential computation")
         for i in range(pathManager.getNbRun()):
-            fullTrainingLoop(i)
+            fullTrainingLoop(args, pathManager, i)
 
     ### MEAN ALL STATS ###
+    print("Mean csv computation")
     nbRun = pathManager.getNbRun()
     allCsvFiles = defaultdict(list) 
     for i in range(nbRun):
         for dataset in ["train", "test", "validation"]:
             file = pathManager.getTrainingCsvReport(dataset, i)
             if os.path.isfile(file):
+                print("Read " + file + " file")
                 allCsvFiles[dataset].append(pd.read_csv(file, index_col=False, na_values='nan', sep=';'))
                 #allCsvFiles[dataset].append(file)
 
@@ -476,6 +481,7 @@ def main(args):
         for data in allCsvFiles[dataset][1:]:
             means[dataset] += data
         means[dataset] /= float(pathManager.getNbRun()) 
+        print("Write into " + pathManager.getMeanTrainingCsvReport(dataset))
         means[dataset].to_csv(pathManager.getMeanTrainingCsvReport(dataset), index=False, na_rep='nan', sep=';')
 
 def resume(args, dbinfo, modelFile):

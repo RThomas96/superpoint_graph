@@ -10,6 +10,7 @@ import numpy as np
 import argparse
 import sys
 sys.path.append("./partition/")
+sys.path.append("./utils/")
 from plyfile import PlyData, PlyElement
 from pathlib import Path
 import visualisation as visu

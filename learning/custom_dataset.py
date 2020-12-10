@@ -43,7 +43,7 @@ def get_datasets(args, pathManager, i, test_seed_offset=0):
     for n in dataset['validation']:
         validlist.append(spg.spg_reader(args, pathManager.getFilesFromDataset(n)[5]))
     if len(validlist) == 0:
-        validlist = testlist
+        validlist = trainlist
 
     # Normalize edge features
     if args.spg_attribs01:
@@ -87,7 +87,9 @@ def get_info(args):
         weights = torch.from_numpy(weights).cuda() if args.cuda else torch.from_numpy(weights)
     else:
         print("Hard coded loss weights !")
-        weights = np.array([0.6, 0.7, 0.5, 1, 1, 1, 1, 1, 1])
+        #weights = np.array([0.69422756, 0.84267807, 0.56590259, 0.99259166, 0.99582052, 0.99747999, 0.99924599, 0.99910761, 0.98240414, 0.9561125,  0.98127003], dtype='f4') # Weights on points
+        weights = np.array([0.74550129, 0.81159779, 0.61670704, 0.98157257, 0.98767797, 0.99452492, 0.99897419, 0.99616868, 0.97169765, 0.9522197,  0.97037522], dtype='f4')  # Weight on spp for regStrength 0.05
+
         #print("Loss weights not implemented yet !")
         #weights = np.ones((colors.nbColor,),dtype='f4')
         weights = torch.from_numpy(weights).cuda() if args.cuda else torch.from_numpy(weights)

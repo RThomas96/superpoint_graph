@@ -20,6 +20,7 @@ from os.path import isfile, join
 from colorLabelManager import ColorLabelManager
 from reportManager import ReportManagerSupervized
 from fractions import Fraction
+from pathManager import PathManager
 
 sys.path.append("./supervized_partition/")
 import graph_processing as graph
