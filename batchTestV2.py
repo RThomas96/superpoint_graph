@@ -9,6 +9,7 @@ from timer import Timer
 import json
 import time
 import pandas as pd
+import os
 
 from superpointComputation import main as superpointComputation 
 from visualize_result import main as visualize
@@ -19,6 +20,10 @@ from collections import defaultdict
 
 def getID(args, originalArgs, step):
     ID = ""
+    if args["data"] != originalArgs["data"]:
+        path = args["data"]
+        datasetName = os.path.basename(path)
+        ID += datasetName + "-"
     for key, values in args[step].items():
         if key != "--epochs" and values != originalArgs[step][key]:
             if key == "--colorCode":
@@ -76,6 +81,9 @@ def main(args):
     pipelineArgs["training"]["--colorCode"] = pipelineArgs["--colorCode"]
     pipelineArgs["sppComp"]["--colorCode"] = pipelineArgs["--colorCode"]
 
+    originalArgs["training"]["--colorCode"] = originalArgs["--colorCode"]
+    originalArgs["sppComp"]["--colorCode"] = originalArgs["--colorCode"]
+
     sppCompID = getID(pipelineArgs, originalArgs, 'sppComp')
     if sppCompID == "":
         sppCompID = "default"
@@ -86,6 +94,9 @@ def main(args):
 
     sppCompPath = args.general_path + "/preprocess/" + sppCompID
     trainingPath = args.general_path + "/training/" + trainingID
+
+    print("SPPCOMP PATH: " + sppCompID)
+    print("TRAINING PATH: " + trainingID)
 
     os.makedirs("projects/" + sppCompPath, exist_ok=True)
     os.makedirs("projects/" + trainingPath, exist_ok=True)
