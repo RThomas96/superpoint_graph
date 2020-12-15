@@ -8,16 +8,23 @@ import argparse
 from timer import Timer
 import json
 import time
+import pandas as pd
 
 from superpointComputation import main as superpointComputation 
 from visualize_result import main as visualize
 from train import main as train 
+from shutil import copy
+from pathManager import PathManager
+from collections import defaultdict
 
 def getID(args, originalArgs, step):
     ID = ""
     for key, values in args[step].items():
-        if values != originalArgs[step][key]:
-            ID += str(key)[2:] + str(values) + "-"
+        if key != "--epochs" and values != originalArgs[step][key]:
+            if key == "--colorCode":
+                ID += str(values) + "-"
+            else:
+                ID += str(key)[2:] + ":"  + str(values) + "-"
     return ID[:-1]
 
 def toList(args, projectPath):
@@ -29,6 +36,22 @@ def toList(args, projectPath):
             sppArgList.append(val)
     return sppArgList
 
+def meanAllCsvTrainingReports(pathManager):
+    nbRun = pathManager.getNbRun()
+    allCsvFiles = defaultdict(list) 
+    means = {}
+    for dataset in ["train", "test", "validation"]:
+        for i in range(nbRun):
+            file = pathManager.getTrainingCsvReport(dataset, i)
+            if os.path.isfile(file):
+                allCsvFiles[dataset].append(pd.read_csv(file, index_col=False, na_values='nan', sep=';'))
+        means[dataset] = allCsvFiles[dataset][0]
+        for data in allCsvFiles[dataset][1:]:
+            means[dataset] += data
+        means[dataset] /= float(pathManager.getNbRun()) 
+        print("Write mean report into " + pathManager.getMeanTrainingCsvReport(dataset))
+        means[dataset].to_csv(pathManager.getMeanTrainingCsvReport(dataset), index=False, na_rep='nan', sep=';')
+
 def main(args):
 
     print("Pipeline start at: " + time.asctime())
@@ -39,7 +62,8 @@ def main(args):
     parser.add_argument('arg_json_file', help='Project name')
     parser.add_argument('--arg_original', default="args_original.json", type=str, help='Project name')
     parser.add_argument('--general_path', default="BETA", type=str, help='Project name')
-    parser.add_argument('--preproc_only', action='store_true', help='Only perform preprocessing step')
+
+    parser.add_argument('--step', default='ptvs', type=str, help='Only perform preprocessing step')
     args = parser.parse_args(args)
 
     with open(args.arg_json_file) as f:
@@ -48,12 +72,17 @@ def main(args):
     with open(args.arg_original) as f:
         originalArgs = json.load(f)
 
+    #Copy colorcode in both arguments, it is equal whatever
+    pipelineArgs["training"]["--colorCode"] = pipelineArgs["--colorCode"]
+    pipelineArgs["sppComp"]["--colorCode"] = pipelineArgs["--colorCode"]
+
     sppCompID = getID(pipelineArgs, originalArgs, 'sppComp')
     if sppCompID == "":
         sppCompID = "default"
     trainingID = getID(pipelineArgs, originalArgs, 'training')
     if trainingID == "":
         trainingID = "default"
+    trainingID = sppCompID + "+" + trainingID
 
     sppCompPath = args.general_path + "/preprocess/" + sppCompID
     trainingPath = args.general_path + "/training/" + trainingID
@@ -61,49 +90,38 @@ def main(args):
     os.makedirs("projects/" + sppCompPath, exist_ok=True)
     os.makedirs("projects/" + trainingPath, exist_ok=True)
 
+    copy(args.arg_json_file,"projects/" + trainingPath)
     try:
         os.symlink(pipelineArgs["data"], "projects/" + sppCompPath + "/data")
     except FileExistsError:
         print("Project already exist, scanning to complete")
 
-    superpointComputation(toList(pipelineArgs['sppComp'], sppCompPath))
-    if not args.preproc_only:
+    preprocessStep = "p" in args.step
+    trainingStep = "t" in args.step
+    visuStep = "v" in args.step
+    statsStep = "s" in args.step
+
+    if preprocessStep:
+        superpointComputation(toList(pipelineArgs['sppComp'], sppCompPath))
+
+    if trainingStep:
         train(toList(pipelineArgs['training'], trainingPath) + ["--inPath", "projects/" + sppCompPath])
+
+    if visuStep:
+        visualize([trainingPath, "LPA3-1", "--inPath", "projects/" + sppCompPath, "--outType", "spge"])
+
+    if statsStep:
+        pathManager = PathManager(trainingPath, sppCompRootPath="projects/" + sppCompPath)
+        meanAllCsvTrainingReports(pathManager)
+
+    timer.stop(0)
+    print(timer.getFormattedTimer(["Total time: "]))
+
 
         #visualize([sppArgs.getProjectPath(), "LPA3-1", "--outType", "spctgde", "--format", "laz"])
     #else:
         #visualize([sppArgs.getProjectPath(), "LPA3-1", "--outType", "sgde", "--format", "laz"])
 
-    ####################
-
-    #rawSppArgs = {
-    #        "--knn_geofeatures" : 100,
-    #        "--knn_adj" : 10,
-    #        "--lambda_edge_weight" : float(1.),
-    #        "--reg_strength" : float(0.01),
-    #        "--d_se_max" : 0,
-    #        "--voxel_width" : float(0.01),
-    #        "--validationIsTest" :"none",
-    #        "--voxelize" :"none",
-    #        "--parallel" : "none"
-    #}
-
-    #allProjectsPath = []
-    #jobs = []
-
-    #it = rank
-    #rawSppArgs["--reg_strength"] += float(it) * float(args.it) + float(args.start) * float(args.it)
-    #rawSppArgs["--reg_strength"] = round(rawSppArgs["--reg_strength"], 2)# Avoid decimal error
-    #sppArgs = SppArgs(args.project_path, rawSppArgs)
-    #allProjectsPath.append("projects/" + sppArgs.getProjectPath())
-    #try:
-    #    os.makedirs("projects/" + sppArgs.getProjectPath())
-    #    os.symlink(args.data_path, "projects/" + sppArgs.getProjectPath() + "/data")
-    #except FileExistsError:
-    #    print("Project already exist, scan to complete")
-
-    #superpointComputation(sppArgs.toList() + ["--format", "laz"])
-    #if not args.preproc_only:
     #    #B7NoEnt 
     #    #train([sppArgs.getProjectPath(), "--epoch", "300", "--resume", "--batch_size", "6", "--parallel", "--loss_weights", "none"])
     #    #B7
@@ -113,9 +131,6 @@ def main(args):
     #    visualize([sppArgs.getProjectPath(), "LPA3-1", "--outType", "spctgde", "--format", "laz"])
     #else:
     #    visualize([sppArgs.getProjectPath(), "LPA3-1", "--outType", "sgde", "--format", "laz"])
-
-    #timer.stop(0)
-    #print(timer.getFormattedTimer(["Total time: "]))
 
 if __name__ == "__main__":
     main(sys.argv[1:])

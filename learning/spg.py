@@ -159,7 +159,7 @@ def loader(entry, train, args, pathManager, test_seed_offset=0):
         clouds, clouds_global = [], [] # clouds: point cloud arrays; clouds_global: diameters before scaling
 
         for s in range(G.vcount()):
-            cloud, diam = load_superpoint(args, pathManager.getFilesFromDataset(n)[6], G.vs[s]['v'], train, test_seed_offset)
+            cloud, diam = load_superpoint(args, pathManager.getFilesFromDataset(fname)[6], G.vs[s]['v'], train, test_seed_offset)
             if cloud is not None:
                 clouds_meta.append('{}.{:d}'.format(fname,G.vs[s]['v'])); clouds_flag.append(0)
                 clouds.append(cloud.T)

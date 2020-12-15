@@ -89,9 +89,9 @@ def writeGeofstd(filename, xyz, geof, components, in_component, dataType="laz"):
 
     io.write_file(filename, xyz, color, dataType)
 #------------------------------------------------------------------------------
-def writePrediction(filename, xyz, prediction, dataType="laz"):
+def writePrediction(filename, xyz, prediction, colorFile="colorCode", dataType="laz"):
     """write a ply with colors for each class"""
-    colorLabelManager = ColorLabelManager()
+    colorLabelManager = ColorLabelManager(colorFile)
     n_label = colorLabelManager.nbColor
     if len(prediction.shape) > 1 and prediction.shape[1] > 1:
         prediction = np.argmax(prediction, axis = 1)

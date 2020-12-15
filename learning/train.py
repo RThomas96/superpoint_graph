@@ -252,7 +252,7 @@ def fullTrainingLoop(args, pathManager, i):
     print("Read dataset")
     create_dataset = custom_dataset.get_datasets
 
-    classNames = list(ColorLabelManager().label2Name.values())[1:] # Without "unknown"
+    classNames = list(ColorLabelManager(args.colorCode).label2Name.values())[1:] # Without "unknown"
 
     args.start_epoch = 0
     # Create model and optimizer
@@ -343,6 +343,7 @@ def main(args):
 
     parser.add_argument('--inPath', default='', type=str, help='Optionnal path in which all inputs files will be used')
     parser.add_argument('--parallel', action='store_true', help='Choose if validation dataset is the same than test dataset')
+    parser.add_argument('--colorCode', default='colorCode', help='Dataset name: sema3d|s3dis')
 
     # Optimization arguments
     parser.add_argument('--wd', default=0, type=float, help='Weight decay')
@@ -354,7 +355,7 @@ def main(args):
     parser.add_argument('--batch_size', default=3, type=int, help='Batch size')
     parser.add_argument('--optim', default='adam', help='Optimizer: sgd|adam')
     parser.add_argument('--grad_clip', default=1, type=float, help='Element-wise clipping of gradient. If 0, does not clip')
-    parser.add_argument('--loss_weights', default='proportional', help='[none, proportional, sqrt] how to weight the loss function')
+    parser.add_argument('--loss_weights', default='proportional', help='[equal, proportional, sqrt] how to weight the loss function')
 
     # Learning process arguments
     parser.add_argument('--cuda', default=1, type=int, help='Bool, use cuda')

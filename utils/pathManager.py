@@ -100,8 +100,9 @@ class PathManager :
         geofFile   = self.sppCompRootPath + "/visualisation/features/" + fileName + "_geof." + self.outFormat
         stdFile   = self.sppCompRootPath + "/visualisation/features/" + fileName  + "_std." + self.outFormat
         confidencePredictionFile   = self.trainingRootPath + "/visualisation/features/" + fileName + "_" + str(runIndex) + "_conf." + self.outFormat
+        elevationFile   = self.sppCompRootPath + "/visualisation/features/" + fileName  + "_elevation." + self.outFormat
 
-        return sppFile, predictionFile, transFile, geofFile, stdFile, confidencePredictionFile
+        return sppFile, predictionFile, transFile, geofFile, stdFile, confidencePredictionFile, elevationFile
 
     def getNbFiles(self):
         return len(self.allDataFileName)

@@ -134,7 +134,7 @@ def mkdirIfNotExist(dir):
     if not os.path.isdir(dir): os.mkdir(dir)
 
 def fullPipeline(i, args, pathManager):
-    colors = ColorLabelManager()
+    colors = ColorLabelManager(args.colorCode)
     n_labels = colors.nbColor
 
     timer = Timer(4)
@@ -189,6 +189,7 @@ def fullPipeline(i, args, pathManager):
             labels = np.array([])
 
         if colors.needAggregation:
+            print("Label aggregation activated !")
             labels = np.array(colors.aggregateLabels(labels))
         
         timer.stop(1)
@@ -303,6 +304,8 @@ def main(args):
     parser.add_argument('--format', default="laz", type=str, help='Format in which all clouds will be saved')
     parser.add_argument('--validationIsTest', action='store_true', help='Choose if validation dataset is the same than test dataset')
     parser.add_argument('--parallel', action='store_true', help='Choose if validation dataset is the same than test dataset')
+
+    parser.add_argument('--colorCode', default='colorCode', help='Dataset name: sema3d|s3dis')
     
     args = parser.parse_args(args)
     
@@ -313,7 +316,7 @@ def main(args):
     pathManager.voxelWidth = str(args.voxel_width)
     pathManager.createDirForSppComputation()
 
-    colors = ColorLabelManager()
+    colors = ColorLabelManager(args.colorCode)
     n_labels = colors.nbColor
     
     if args.parallel:

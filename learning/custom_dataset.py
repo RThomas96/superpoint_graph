@@ -62,7 +62,7 @@ def get_datasets(args, pathManager, i, test_seed_offset=0):
             scaler
 
 def get_info(args):
-    colors = ColorLabelManager()
+    colors = ColorLabelManager(args.colorCode)
 
     edge_feats = 0
     try:
@@ -82,7 +82,7 @@ def get_info(args):
     except AttributeError:
         loss = args.loss_weight
 
-    if loss == 'none':
+    if loss == 'equal':
         weights = np.ones((colors.nbColor,),dtype='f4')
         weights = torch.from_numpy(weights).cuda() if args.cuda else torch.from_numpy(weights)
     else:

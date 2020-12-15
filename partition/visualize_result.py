@@ -55,15 +55,16 @@ def openParsedFeatures(parsed_file):
 
 def main(args):
     parser = argparse.ArgumentParser(description='Generate ply file from prediction file')
-    parser.add_argument('ROOT_PATH', help='Folder name which contains data')
+    parser.add_argument('ROOT_PATH', help='Folder name which contains results data')
     parser.add_argument('fileName', help='Full path of file to display, from data folder, must be "test/X"')
+    parser.add_argument('--inPath', default='', type=str, help='Optionnal path in which all inputs files will be used')
     parser.add_argument('-ow', '--overwrite', action='store_true', help='Wether to read existing files or overwrite them')
     parser.add_argument('--supervized', action='store_true', help='Wether to read existing files or overwrite them')
     parser.add_argument('--outType', default='p', help='which cloud to output: s = superpoints, p = predictions, t = transitions (only for supervized partitions), g = geof, d = geof std, c = confidence, e = elevation')
     parser.add_argument('--filter_label', help='Output only SPP with a specific label')
-    parser.add_argument('--log', help='Files are read from log directory, you can set some REG_STRENGTH value to choose which file to choose')
     parser.add_argument('--format', default="laz", type=str, help='Format in which all clouds will be saved')
     parser.add_argument('--specify_run', default=-1, type=str, help='Format in which all clouds will be saved')
+    parser.add_argument('--colorCode', default="colorCode", type=str, help='Format in which all clouds will be saved')
 
     args = parser.parse_args(args)
     
@@ -79,18 +80,12 @@ def main(args):
     if args.specify_run > -1:
         runIndex = args.specify_run
     
-    pathManager = PathManager(args.ROOT_PATH, args.format)
-    
-    #if args.log is not None:
-    #    folder = os.path.split(args.file_path)[0] + '/log/'
-    #    file_name = os.path.split(args.file_path)[1] + args.log +"-1.0-45-10-1000000.log"
-    #else:
-    #    folder = os.path.split(args.file_path)[0] + '/'
-    #    file_name = os.path.split(args.file_path)[1]
+    #pathManager = PathManager(args.ROOT_PATH, args.format)
+    pathManager = PathManager(args.ROOT_PATH, sppCompRootPath=args.inPath, format=args.format)
     
     fileName, dataFile, dataType, voxelisedFile, featureFile, spgFile, parseFile = pathManager.getFilesFromDataset(args.fileName)
     
-    sppFile, predictionFile, transFile, geofFile, stdFile, confPredictionFile = pathManager.getVisualisationFilesFromDataset(args.fileName, runIndex)
+    sppFile, predictionFile, transFile, geofFile, stdFile, confPredictionFile, elevationFile = pathManager.getVisualisationFilesFromDataset(args.fileName, runIndex)
     
     #if args.supervized:
     #    xyz, rgb, edg_source, edg_target, is_transition, local_geometry, labels, objects, elevation, xyn = graph.read_structure(supervized_fea_file, False)
@@ -111,7 +106,7 @@ def main(args):
     if outPredictions:
         try:
             pred_full = openPredictions(pathManager.getPredictionFile(runIndex), fileName, components, xyz)
-            visu.writePrediction(predictionFile, xyz, pred_full)
+            visu.writePrediction(predictionFile, xyz, pred_full, colorFile=args.colorCode)
         except ValueError:
             print("Can't visualize predictions")
 
@@ -122,7 +117,7 @@ def main(args):
 
     if outElevation:
         parsedFeatures = openParsedFeatures(parseFile)
-        visu.writeElevation(confPredictionFile.replace("_conf", "_elevation"), parsedFeatures)
+        visu.writeElevation(elevationFile, parsedFeatures)
     
     if outSuperpoints and args.filter_label is not None:
         print("Filter activated")

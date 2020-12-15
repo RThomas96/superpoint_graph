@@ -1,20 +1,19 @@
 {
-  "--colorCode" : "colorCode",
+  "data": "/home/thomas/Data/Cajun/Data/Evaluation/Methods/superpoint_graph/data",
+  "--colorCode" : "colorCodeNoCol",
   "sppComp": {
     "--knn_geofeatures": 100,
     "--knn_adj" : 10,
     "--lambda_edge_weight" : 1,
     "--reg_strength" : 0.05,
     "--d_se_max" : 0,
-    "--voxel_width" : 0.01,
+    "--voxel_width" : 0.3,
     "--ver_batch" : 0,
 
     "--format" : "laz",
 
     "--voxelize" : "none",
-    "--parallel" : "none",
-
-    "--colorCode" : "colorCode"
+    "--parallel" : "none"
   },
   "training": {
     "--wd" : 0,
@@ -23,14 +22,14 @@
     "--lr_steps" : "[200, 400, 600]",
     "--momentum" : 0.9,
     
-    "--epochs" : 300,
-    "--batch_size" : 6,
+    "--epochs" : 10,
+    "--batch_size" : 2,
 
     "--optim" : "adam",
     "--grad_clip" : 1,
 
-    "--loss_weights" : "proportional",
-    "--model_config" : "gru_11,f_11",
+    "--loss_weights" : "equal",
+    "--model_config" : "gru_11,f_5",
     "--edge_attribs" : "delta_avg,delta_std,nlength/ld,surface/ld,volume/ld,size/ld,xyz/d",
     "--pc_attribs" : "xyzrgbelpsvXYZ",
     "--fnet_bnidx" : 2,
@@ -46,8 +45,7 @@
     "--ptn_nfeat_stn" : 14,
 
     "--resume" : "none",
-    "--parallel" : "none",
-
-    "--colorCode" : "colorCode"
+    "--parallel" : "none"
   }
 }
+

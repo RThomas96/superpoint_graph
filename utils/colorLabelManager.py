@@ -1,9 +1,9 @@
 import os
 
 class ColorLabelManager:
-        def __init__(self):
+        def __init__(self, file="colorCode"):
                 #self.filePath = "/home/thomas/Data/Cajun/Data/Evaluation/Methods/superpoint_graph/utils/colorCode" 
-                self.filePath = os.path.dirname(os.path.realpath(__file__)) + '/../utils/colorCode'
+                self.filePath = os.path.dirname(os.path.realpath(__file__)) + '/../utils/' + file
                 self.label2Color, self.label2Name, self.aggregationDict = self.parseColorFile()
                 self.nbColor = len(self.aggregationDict)
                 self.needAggregation = True if max([len(x) for x in self.aggregationDict.values()]) > 1 else False
@@ -45,5 +45,8 @@ class ColorLabelManager:
                 for key in self.aggregationDict.keys():
                     for value in self.aggregationDict[key]:
                         reverse_dict[value+1] = int(key)
+
+                for key, value in reverse_dict.items():
+                    print(str(key) + " label is now " + str(value) + " label" )
                 
                 self.label2Color, self.label2Name, self.aggregationDict = newLabel2Color, newLabel2Name, reverse_dict
