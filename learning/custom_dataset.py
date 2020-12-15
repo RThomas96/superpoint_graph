@@ -54,11 +54,11 @@ def get_datasets(args, pathManager, i, test_seed_offset=0):
     "                           In our case arg2 is a functools.partial with spg.loader "
     "                           And this function arg2 with load data given by arg1, in our case arg1 is data returned by spg_to_igraph"
     return tnt.dataset.ListDataset([spg.spg_to_igraph(*tlist) for tlist in trainlist],
-                                    functools.partial(spg.loader, train=True, args=args, db_path=args.CUSTOM_SET_PATH)), \
+                                    functools.partial(spg.loader, train=True, args=args, pathManager=pathManager)), \
            tnt.dataset.ListDataset([spg.spg_to_igraph(*tlist) for tlist in testlist],
-                                    functools.partial(spg.loader, train=False, args=args, db_path=args.CUSTOM_SET_PATH, test_seed_offset=test_seed_offset)) ,\
+                                    functools.partial(spg.loader, train=False, args=args, pathManager=pathManager, test_seed_offset=test_seed_offset)) ,\
            tnt.dataset.ListDataset([spg.spg_to_igraph(*tlist) for tlist in validlist],
-                                    functools.partial(spg.loader, train=False, args=args, db_path=args.CUSTOM_SET_PATH, test_seed_offset=test_seed_offset)) ,\
+                                    functools.partial(spg.loader, train=False, args=args, pathManager=pathManager, test_seed_offset=test_seed_offset)) ,\
             scaler
 
 def get_info(args):
@@ -89,6 +89,7 @@ def get_info(args):
         print("Hard coded loss weights !")
         #weights = np.array([0.69422756, 0.84267807, 0.56590259, 0.99259166, 0.99582052, 0.99747999, 0.99924599, 0.99910761, 0.98240414, 0.9561125,  0.98127003], dtype='f4') # Weights on points
         weights = np.array([0.74550129, 0.81159779, 0.61670704, 0.98157257, 0.98767797, 0.99452492, 0.99897419, 0.99616868, 0.97169765, 0.9522197,  0.97037522], dtype='f4')  # Weight on spp for regStrength 0.05
+        #weights = np.array([0.74550129, 0.81159779, 0.61670704, 1, 1], dtype='f4')  # Weight on spp for regStrength 0.05
 
         #print("Loss weights not implemented yet !")
         #weights = np.ones((colors.nbColor,),dtype='f4')

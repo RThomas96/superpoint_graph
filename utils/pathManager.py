@@ -10,29 +10,24 @@ def mkdirIfNotExist(dir):
         os.mkdir(dir)
 
 class PathManager : 
-    def __init__(self, projectName, format = "laz"):
+    def __init__(self, projectName, sppCompRootPath = "", format = "laz"):
         self.rootPath = os.path.dirname(os.path.realpath(__file__)) + '/../projects/' + projectName 
         if not os.path.isdir(self.rootPath):
             raise NameError('The root subfolder you indicate doesn\'t exist')
 
+        if sppCompRootPath == "":
+            self.sppCompRootPath = self.rootPath
+            self.trainingRootPath = self.rootPath
+        else:
+            self.sppCompRootPath = sppCompRootPath
+            self.trainingRootPath = self.rootPath
+
         self.outFormat = format
 
-        # Report hierarchy
-        self.reportPath = self.rootPath + "/reports"
-        self.sppCompReportPath = self.reportPath + "/sppComputation"
-        self.trainingReportPath = self.reportPath + "/training"
-
-        self.localReportPath = self.sppCompReportPath + "/" + datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
-        self.generalReport = self.localReportPath + "/generalReport.report"
-        self.timeReport= self.localReportPath + "/sppComputationBenchmark.report"
-
-        # Usefull to choose the right voxel file 
+        #SppComp
+        self.sppCompReportPath = self.sppCompRootPath + "/reports/sppComputation"
         self.voxelWidth = "0.03"
-
-        self.allDataFileName = {}
-        self.allDataFileType = {}
-
-        dataPath = self.rootPath + "/data/"
+        dataPath = self.sppCompRootPath + "/data/"
         self.allDataFileName = []
         self.allDataFileType = []
         try:
@@ -51,6 +46,9 @@ class PathManager :
             self.allDataFileName.append(dataName)
             self.allDataFileType.append("ply")
 
+        #Training
+        self.trainingReportPath = self.trainingRootPath + "/reports/training"
+
         self.allDataDataset = []
         with open(dataPath + "datasetConfig") as json_file:
             data = json.load(json_file)
@@ -61,13 +59,13 @@ class PathManager :
                         self.allDataDataset[-1][dataset].append(file)
 
     def getModelFile(self, i):
-        return self.rootPath + "/results/" + str(i) + "/model.pth.h5"
+        return self.trainingRootPath + "/results/" + str(i) + "/model.pth.h5"
 
     def getPredictionFile(self, i):
-        return self.rootPath + "/results/" + str(i) + "/predictions.h5"
+        return self.trainingRootPath + "/results/" + str(i) + "/predictions.h5"
 
     def getRawPredictionFile(self, i):
-        return self.rootPath + "/results/" + str(i) + "/rawPredictions.h5"
+        return self.trainingRootPath + "/results/" + str(i) + "/rawPredictions.h5"
 
     def getNbRun(self):
         return len(self.allDataDataset)
@@ -79,13 +77,13 @@ class PathManager :
             i = self.allDataFileName.index(name)
         fileName = self.allDataFileName[i]
         dataType = self.allDataFileType[i]
-        dataFile = self.rootPath + "/data/" + fileName + '.' + dataType
+        dataFile = self.sppCompRootPath + "/data/" + fileName + '.' + dataType
     
-        featureFile  = self.rootPath + "/features/" + fileName + ".h5" 
-        spgFile  = self.rootPath + "/superpoint_graphs/" + fileName + ".h5" 
-        parseFile  = self.rootPath + "/parsed/" + fileName + ".h5"
+        featureFile  = self.sppCompRootPath + "/features/" + fileName + ".h5" 
+        spgFile  = self.sppCompRootPath + "/superpoint_graphs/" + fileName + ".h5" 
+        parseFile  = self.sppCompRootPath + "/parsed/" + fileName + ".h5"
     
-        voxelisedFile  = self.rootPath + "/data/voxelised/" + fileName + '-' + self.voxelWidth + '.' + self.outFormat
+        voxelisedFile  = self.sppCompRootPath + "/data/voxelised/" + fileName + '-' + self.voxelWidth + '.' + self.outFormat
         #voxelisedFile  = self.rootPath + "/data/voxelised/" + dataset + "/" + fileName + "/" + fileName + "-prunned" + str(args.voxel_width).replace(".", "-") + "." + dataType
         return fileName, dataFile, dataType, voxelisedFile, featureFile, spgFile, parseFile
 
@@ -96,12 +94,12 @@ class PathManager :
         fileName = self.allDataFileName[i]
         #dataType = self.allDataFileType[dataset][i]
     
-        sppFile   = self.rootPath + "/visualisation/superpoints/" + fileName + "_spp." + self.outFormat
-        predictionFile   = self.rootPath + "/visualisation/predictions/" + fileName + "_" + str(runIndex) + "_pred." + self.outFormat
-        transFile   = self.rootPath + "/visualisation/features/" + fileName + "_trans." + self.outFormat
-        geofFile   = self.rootPath + "/visualisation/features/" + fileName + "_geof." + self.outFormat
-        stdFile   = self.rootPath + "/visualisation/features/" + fileName  + "_std." + self.outFormat
-        confidencePredictionFile   = self.rootPath + "/visualisation/features/" + fileName + "_" + str(runIndex) + "_conf." + self.outFormat
+        sppFile   = self.sppCompRootPath + "/visualisation/superpoints/" + fileName + "_spp." + self.outFormat
+        predictionFile   = self.trainingRootPath + "/visualisation/predictions/" + fileName + "_" + str(runIndex) + "_pred." + self.outFormat
+        transFile   = self.sppCompRootPath + "/visualisation/features/" + fileName + "_trans." + self.outFormat
+        geofFile   = self.sppCompRootPath + "/visualisation/features/" + fileName + "_geof." + self.outFormat
+        stdFile   = self.sppCompRootPath + "/visualisation/features/" + fileName  + "_std." + self.outFormat
+        confidencePredictionFile   = self.trainingRootPath + "/visualisation/features/" + fileName + "_" + str(runIndex) + "_conf." + self.outFormat
 
         return sppFile, predictionFile, transFile, geofFile, stdFile, confidencePredictionFile
 
@@ -110,15 +108,17 @@ class PathManager :
 
     def createDirForSppComputation(self):
         for sub in ["/features", "/superpoint_graphs", "/parsed"] : 
-            mkdirIfNotExist(self.rootPath + sub)
-        mkdirIfNotExist(self.reportPath)
-        mkdirIfNotExist(self.rootPath + "/data/voxelised")
+            mkdirIfNotExist(self.sppCompRootPath + sub)
+        mkdirIfNotExist(self.sppCompRootPath + "/reports")
         mkdirIfNotExist(self.sppCompReportPath)
+        mkdirIfNotExist(self.sppCompRootPath + "/data/voxelised")
+
+    def createDirForTraining(self):
+        mkdirIfNotExist(self.trainingRootPath + "/reports")
         mkdirIfNotExist(self.trainingReportPath)
-        mkdirIfNotExist(self.localReportPath)
-        mkdirIfNotExist(self.rootPath + "/results")
+        mkdirIfNotExist(self.trainingRootPath + "/results")
         for i in range(self.getNbRun()):
-            mkdirIfNotExist(self.rootPath + "/results/" + str(i))
+            mkdirIfNotExist(self.trainingRootPath + "/results/" + str(i))
             mkdirIfNotExist(self.trainingReportPath + "/" + str(i))
 
     def saveGeneralReport(self, formattedReport):

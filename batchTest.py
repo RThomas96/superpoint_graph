@@ -102,9 +102,16 @@ def main(args):
     except FileExistsError:
         print("Project already exist, scan to complete")
 
-    #superpointComputation(sppArgs.toList() + ["--format", "laz"])
+    superpointComputation(sppArgs.toList() + ["--format", "laz"])
     if not args.preproc_only:
-        train([sppArgs.getProjectPath(), "--epoch", "300", "--resume", "--batch_size", "6"])
+        #B7NoEnt 
+        #train([sppArgs.getProjectPath(), "--epoch", "300", "--resume", "--batch_size", "6", "--parallel", "--loss_weights", "none"])
+        #B7
+        #train([sppArgs.getProjectPath(), "--epoch", "300", "--resume", "--batch_size", "6", "--parallel"])
+        #B7CleanNN200
+        #train([sppArgs.getProjectPath(), "--epoch", "300", "--resume", "--batch_size", "6", "--parallel", "--spg_augm_nneigh", "200"])
+        #B7NN5e4
+        train([sppArgs.getProjectPath(), "--epoch", "300", "--resume", "--batch_size", "6", "--parallel", "--spg_augm_nneigh", "50000"])
         visualize([sppArgs.getProjectPath(), "LPA3-1", "--outType", "spctgde", "--format", "laz"])
     else:
         visualize([sppArgs.getProjectPath(), "LPA3-1", "--outType", "sgde", "--format", "laz"])

@@ -279,7 +279,8 @@ def fullTrainingLoop(args, pathManager, i):
         " Update tensor if grad is computed "
         scheduler.step() 
 
-        isEvalEpoch = (epoch % args.eval_nth_epoch == 0)
+        isEvalValEpoch = (epoch % args.eval_valid_nth_epoch == 0)
+        isEvalTestEpoch = (epoch % args.eval_test_nth_epoch == 0)
         isSaveEpoch = (epoch % args.save_nth_epoch == 0)
 
         # 1. Train
@@ -289,11 +290,15 @@ def fullTrainingLoop(args, pathManager, i):
 
         saveResult(epoch, loss_train, CM_train_pt, CM_train_spp, pathManager.getTrainingCsvReport("train", i))
 
+
         # 2. Evaluation
-        if firstEpoch or isEvalEpoch:
+        if firstEpoch or isEvalTestEpoch:
             loss_test, CM_test_pt, CM_test_spp = eval(model, False)
             saveResult(epoch, loss_test, CM_test_pt, CM_test_spp, pathManager.getTrainingCsvReport("test", i))
+            print(IOU_COLOR + 'IoU: %3.2f%%' % (CM_test_pt.getAvgIoU()*100) + CLOSE)
+            print(TEST_COLOR + 'Test       -> loss: %1.4f,  acc pt: %3.2f%%,  acc spp: %3.2f%%,  avgIoU: %3.2f%%' % (loss_test, CM_test_pt.getAccuracy()*100, CM_test_spp.getAccuracy()*100, CM_test_pt.getAvgIoU()*100) + CLOSE)
 
+        if firstEpoch or isEvalValEpoch:
             loss_val, CM_val_pt, CM_val_spp = eval(model, True)
             if args.only_best:
                 isBest = CM_val_pt.getAvgIoU() > best_iou or epoch < 5
@@ -311,8 +316,6 @@ def fullTrainingLoop(args, pathManager, i):
                 saveResult(epoch, loss_val, CM_val_pt, CM_val_spp, pathManager.getTrainingCsvReport("validation", i))
 
             print(VAL_COLOR + 'Validation -> loss: %1.4f,  acc pt: %3.2f%%,  acc spp: %3.2f%%,  avgIoU: %3.2f%%' % (loss_val, CM_val_pt.getAccuracy()*100, CM_val_spp.getAccuracy()*100, CM_val_pt.getAvgIoU()*100) + CLOSE)
-            print(IOU_COLOR + 'IoU: %3.2f%%' % (CM_test_pt.getAvgIoU()*100) + CLOSE)
-            print(TEST_COLOR + 'Test       -> loss: %1.4f,  acc pt: %3.2f%%,  acc spp: %3.2f%%,  avgIoU: %3.2f%%' % (loss_test, CM_test_pt.getAccuracy()*100, CM_test_spp.getAccuracy()*100, CM_test_pt.getAvgIoU()*100) + CLOSE)
 
         if isSaveEpoch and not args.only_best:
             torch.save({'epoch': epoch + 1, 'args': args, 'state_dict': model.state_dict(), 'optimizer' : optimizer.state_dict(), 'scaler': scaler}, pathManager.getModelFile(i))
@@ -338,6 +341,7 @@ def main(args):
     parser.add_argument('ROOT_PATH', help='name of the folder containing the data directory')
     # parser.add_argument('MODEL_NAME', help='Loads a pretrained model.')
 
+    parser.add_argument('--inPath', default='', type=str, help='Optionnal path in which all inputs files will be used')
     parser.add_argument('--parallel', action='store_true', help='Choose if validation dataset is the same than test dataset')
 
     # Optimization arguments
@@ -355,7 +359,8 @@ def main(args):
     # Learning process arguments
     parser.add_argument('--cuda', default=1, type=int, help='Bool, use cuda')
     parser.add_argument('--nworkers', default=0, type=int, help='Num subprocesses to use for data loading. 0 means that the data will be loaded in the main process')
-    parser.add_argument('--eval_nth_epoch', default=10, type=int, help='Test each n-th epoch during training')
+    parser.add_argument('--eval_valid_nth_epoch', default=50, type=int, help='Test each n-th epoch during training')
+    parser.add_argument('--eval_test_nth_epoch', default=10, type=int, help='Test each n-th epoch during training')
     #parser.add_argument('--test_train_nth_epoch', default=1, type=int, help='Test each n-th epoch during training on training data')
     #parser.add_argument('--test_valid_nth_epoch', default=1, type=int, help='Test each n-th epoch during training on validation data')
     parser.add_argument('--save_nth_epoch', default=10, type=int, help='Save model each n-th epoch during training, isn\'t take into account if only best is set. Then the model is saved evey time there is a better model')
@@ -410,8 +415,8 @@ def main(args):
     # All superpoints with less than this amount of point rely solely on contextual classification
     parser.add_argument('--ptn_minpts', default=40, type=int, help='Minimum number of points in a superpoint for computing its embedding.')
     # All superpoints are resampled to this size for pointnet
-    # CHANGED
     parser.add_argument('--ptn_npts', default=128, type=int, help='Number of input points for PointNet.')
+    #parser.add_argument('--ptn_npts', default=256, type=int, help='Number of input points for PointNet.')
     # Pointnet layer configuration
     parser.add_argument('--ptn_widths', default='[[64,64,128,128,256], [256,64,32]]', help='PointNet widths')
     parser.add_argument('--ptn_widths_stn', default='[[64,64,128], [128,64]]', help='PointNet\'s Transformer widths')
@@ -434,7 +439,8 @@ def main(args):
     args.sp_decoder_config = ast.literal_eval(args.sp_decoder_config)
     args.ptn_widths_stn = ast.literal_eval(args.ptn_widths_stn)
 
-    pathManager = PathManager(args.ROOT_PATH)
+    pathManager = PathManager(args.ROOT_PATH, sppCompRootPath=args.inPath)
+    pathManager.createDirForTraining()
     
     " Dirty fix in order to keep arguments coherent in the rest of the code "
     " Need refactor but args is propagate all hover the code "
@@ -449,6 +455,8 @@ def main(args):
     #    torch.backends.cudnn.enabled = False
 
     #### MAIN ####
+
+    print(args)
 
     if args.parallel:
         print("Paralell training activated")

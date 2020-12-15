@@ -18,6 +18,10 @@ import h5py
 from sklearn import preprocessing
 import igraph
 
+import sys
+sys.path.append("./utils")
+from pathManager import PathManager
+
 # DEBUG
 from pudb import set_trace;
 
@@ -129,7 +133,7 @@ def k_big_enough(G, minpts, k):
     return G.subgraph(range(n))
 
 
-def loader(entry, train, args, db_path, test_seed_offset=0):
+def loader(entry, train, args, pathManager, test_seed_offset=0):
     """ Prepares a superpoint graph (potentially subsampled in training) and associated superpoints. """
     G, fname = entry
     # 1) subset (neighborhood) selection of (permuted) superpoint graph
@@ -139,26 +143,14 @@ def loader(entry, train, args, db_path, test_seed_offset=0):
             perm = list(range(G.vcount())); random.shuffle(perm)
             G = G.permute_vertices(perm)
 
-        # Set ratio small spp/big spp to 1/3
-        minpts = args.ptn_minpts
-        ratio = len(np.array(G.vs['s']) >= minpts)/G.vcount()
-        if ratio > 0.3333333:
-            nb = (ratio - 0.33333)*G.vcount()
-            valid = [np.array(G.vs['s']) >= minpts]
-            print(str(len(valid)) + " -- " + str(int(nb)))
-            centers = random.sample(valid, k=int(nb))
-            G = G.subgraphs(centers)
-
-        while(len(np.array(G.vs['s']) >= minpts) > args.spg_augm_hardcutoff):
-            G = random_neighborhoods(G, 10, args.spg_augm_order)
-
-        # Append random subgraphs of order 3
-        #if 0 < args.spg_augm_nneigh < G.vcount():
-        #    G = random_neighborhoods(G, args.spg_augm_nneigh, args.spg_augm_order)
+        # Append random subgraphs of order 3 <- NO
+        if 0 < args.spg_augm_nneigh < G.vcount():
+            G = random_neighborhoods(G, args.spg_augm_nneigh, args.spg_augm_order)
 
         # Return a continuous subgraph of maximum augm_hardcutoff points with each more than ptn_minpts points
-        #if 0 < args.spg_augm_hardcutoff < G.vcount():
-        #    G = k_big_enough(G, args.ptn_minpts, args.spg_augm_hardcutoff)
+        # Note: all small spp are KEEPED, but do not count in the augm_hardcutoff counter
+        if 0 < args.spg_augm_hardcutoff < G.vcount():
+            G = k_big_enough(G, args.ptn_minpts, args.spg_augm_hardcutoff)
 
     # Only stores graph with edges
     if len(G.get_edgelist()) != 0:
@@ -167,7 +159,7 @@ def loader(entry, train, args, db_path, test_seed_offset=0):
         clouds, clouds_global = [], [] # clouds: point cloud arrays; clouds_global: diameters before scaling
 
         for s in range(G.vcount()):
-            cloud, diam = load_superpoint(args, db_path + '/parsed/' + fname + '.h5', G.vs[s]['v'], train, test_seed_offset)
+            cloud, diam = load_superpoint(args, pathManager.getFilesFromDataset(n)[6], G.vs[s]['v'], train, test_seed_offset)
             if cloud is not None:
                 clouds_meta.append('{}.{:d}'.format(fname,G.vs[s]['v'])); clouds_flag.append(0)
                 clouds.append(cloud.T)

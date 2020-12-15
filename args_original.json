@@ -1,0 +1,11 @@
+{
+  "sppComp": {
+      "--knn_geofeatures" : 100,
+      "--knn_adj" : 100,
+      "--voxel_width" : 0.03,
+      "--voxelize" : "none"
+  },
+  "training": {
+      "--batch_size" : 1
+  }
+}

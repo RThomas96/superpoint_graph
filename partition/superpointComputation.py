@@ -309,7 +309,7 @@ def main(args):
     if(args.overwrite):
         print("Warning: files will be overwritten !!")
     
-    pathManager = PathManager(args.ROOT_PATH, args.format)
+    pathManager = PathManager(args.ROOT_PATH, format=args.format)
     pathManager.voxelWidth = str(args.voxel_width)
     pathManager.createDirForSppComputation()
 
