@@ -68,7 +68,7 @@ def main(args):
     parser.add_argument('--arg_original', default="args_original.json", type=str, help='Project name')
     parser.add_argument('--general_path', default="BETA", type=str, help='Project name')
 
-    parser.add_argument('--step', default='ptvs', type=str, help='Only perform preprocessing step')
+    parser.add_argument('--step', default='ptvsV', type=str, help='Only perform preprocessing step')
     args = parser.parse_args(args)
 
     with open(args.arg_json_file) as f:
@@ -109,17 +109,27 @@ def main(args):
 
     preprocessStep = "p" in args.step
     trainingStep = "t" in args.step
-    visuStep = "v" in args.step
+    visuStep = "v" in args.step or "V" in args.step
+    allVisuStep = "V" in args.step
     statsStep = "s" in args.step
 
     if preprocessStep:
+        print("Preprocess step")
         superpointComputation(toList(pipelineArgs['sppComp'], sppCompPath))
 
     if trainingStep:
+        print("Training step")
         train(toList(pipelineArgs['training'], trainingPath) + ["--inPath", "projects/" + sppCompPath])
 
     if visuStep:
-        visualize([trainingPath, "LPA3-1", "--inPath", "projects/" + sppCompPath, "--outType", "spge"])
+        print("Visualisation step")
+        if not allVisuStep:
+            visualize([trainingPath, "LPA3-1", "--inPath", "projects/" + sppCompPath, "--outType", "spge"])
+        else:
+            visualize([trainingPath, "LPA3-1", "--inPath", "projects/" + sppCompPath, "--outType", "spge", "--specify_run", "0", "--colorCode", pipelineArgs["--colorCode"]])
+            visualize([trainingPath, "LPA4-3", "--inPath", "projects/" + sppCompPath, "--outType", "spge", "--specify_run", "1", "--colorCode", pipelineArgs["--colorCode"]])
+            visualize([trainingPath, "LPA4-5", "--inPath", "projects/" + sppCompPath, "--outType", "spge", "--specify_run", "2", "--colorCode", pipelineArgs["--colorCode"]])
+            visualize([trainingPath, "LPA6-2", "--inPath", "projects/" + sppCompPath, "--outType", "spge", "--specify_run", "3", "--colorCode", pipelineArgs["--colorCode"]])
 
     if statsStep:
         pathManager = PathManager(trainingPath, sppCompRootPath="projects/" + sppCompPath)
@@ -127,21 +137,6 @@ def main(args):
 
     timer.stop(0)
     print(timer.getFormattedTimer(["Total time: "]))
-
-
-        #visualize([sppArgs.getProjectPath(), "LPA3-1", "--outType", "spctgde", "--format", "laz"])
-    #else:
-        #visualize([sppArgs.getProjectPath(), "LPA3-1", "--outType", "sgde", "--format", "laz"])
-
-    #    #B7NoEnt 
-    #    #train([sppArgs.getProjectPath(), "--epoch", "300", "--resume", "--batch_size", "6", "--parallel", "--loss_weights", "none"])
-    #    #B7
-    #    #train([sppArgs.getProjectPath(), "--epoch", "300", "--resume", "--batch_size", "6", "--parallel"])
-    #    #B7CleanNN200
-    #    train([sppArgs.getProjectPath(), "--epoch", "300", "--resume", "--batch_size", "6", "--parallel", "--spg_augm_nneigh", "200"])
-    #    visualize([sppArgs.getProjectPath(), "LPA3-1", "--outType", "spctgde", "--format", "laz"])
-    #else:
-    #    visualize([sppArgs.getProjectPath(), "LPA3-1", "--outType", "sgde", "--format", "laz"])
 
 if __name__ == "__main__":
     main(sys.argv[1:])

@@ -265,6 +265,7 @@ def fullTrainingLoop(args, pathManager, i):
 
     train_dataset, test_dataset, valid_dataset, scaler = create_dataset(args, pathManager, 0)
 
+    print('RUN: ' + str(i))
     print('Train dataset: %i elements - Test dataset: %i elements - Validation dataset: %i elements' % (len(train_dataset),len(test_dataset),len(valid_dataset)))
     ptnCloudEmbedder = pointnet.CloudEmbedder(args)
     scheduler = MultiStepLR(optimizer, milestones=args.lr_steps, gamma=args.lr_decay, last_epoch=args.start_epoch-1)
@@ -359,7 +360,7 @@ def main(args):
 
     # Learning process arguments
     parser.add_argument('--cuda', default=1, type=int, help='Bool, use cuda')
-    parser.add_argument('--nworkers', default=0, type=int, help='Num subprocesses to use for data loading. 0 means that the data will be loaded in the main process')
+    parser.add_argument('--nworkers', default=3, type=int, help='Num subprocesses to use for data loading. 0 means that the data will be loaded in the main process')
     parser.add_argument('--eval_valid_nth_epoch', default=50, type=int, help='Test each n-th epoch during training')
     parser.add_argument('--eval_test_nth_epoch', default=10, type=int, help='Test each n-th epoch during training')
     #parser.add_argument('--test_train_nth_epoch', default=1, type=int, help='Test each n-th epoch during training on training data')
@@ -460,38 +461,48 @@ def main(args):
     print(args)
 
     if args.parallel:
-        print("Paralell training activated")
-        with multiprocessing.Pool(4) as pool:    
-            proc = []
-            for i in range(pathManager.getNbRun()):
-                proc.append(pool.apply_async(fullTrainingLoop, (args, pathManager, i,)))
-            for pr in proc:
-                pr.get()
+        from mpi4py import MPI
+
+        print("Distributed training activated")
+
+        comm = MPI.COMM_WORLD
+        rank = comm.Get_rank()
+
+        fullTrainingLoop(args, pathManager, rank)
+
+        #print("Parallel training activated")
+        #with multiprocessing.Pool(4) as pool:    
+        #    proc = []
+        #    for i in range(pathManager.getNbRun()):
+        #        proc.append(pool.apply_async(fullTrainingLoop, (args, pathManager, i,)))
+        #    for pr in proc:
+        #        pr.get()
     else:
         print("Sequential computation")
         for i in range(pathManager.getNbRun()):
             fullTrainingLoop(args, pathManager, i)
 
-    ### MEAN ALL STATS ###
-    print("Mean csv computation")
-    nbRun = pathManager.getNbRun()
-    allCsvFiles = defaultdict(list) 
-    for i in range(nbRun):
-        for dataset in ["train", "test", "validation"]:
-            file = pathManager.getTrainingCsvReport(dataset, i)
-            if os.path.isfile(file):
-                print("Read " + file + " file")
-                allCsvFiles[dataset].append(pd.read_csv(file, index_col=False, na_values='nan', sep=';'))
-                #allCsvFiles[dataset].append(file)
+    if not args.parallel:
+        ### MEAN ALL STATS ###
+        print("Mean csv computation")
+        nbRun = pathManager.getNbRun()
+        allCsvFiles = defaultdict(list) 
+        for i in range(nbRun):
+            for dataset in ["train", "test", "validation"]:
+                file = pathManager.getTrainingCsvReport(dataset, i)
+                if os.path.isfile(file):
+                    print("Read " + file + " file")
+                    allCsvFiles[dataset].append(pd.read_csv(file, index_col=False, na_values='nan', sep=';'))
+                    #allCsvFiles[dataset].append(file)
 
-    means = {}
-    for dataset in ["train", "test", "validation"]:
-        means[dataset] = allCsvFiles[dataset][0]
-        for data in allCsvFiles[dataset][1:]:
-            means[dataset] += data
-        means[dataset] /= float(pathManager.getNbRun()) 
-        print("Write into " + pathManager.getMeanTrainingCsvReport(dataset))
-        means[dataset].to_csv(pathManager.getMeanTrainingCsvReport(dataset), index=False, na_rep='nan', sep=';')
+        means = {}
+        for dataset in ["train", "test", "validation"]:
+            means[dataset] = allCsvFiles[dataset][0]
+            for data in allCsvFiles[dataset][1:]:
+                means[dataset] += data
+            means[dataset] /= float(pathManager.getNbRun()) 
+            print("Write into " + pathManager.getMeanTrainingCsvReport(dataset))
+            means[dataset].to_csv(pathManager.getMeanTrainingCsvReport(dataset), index=False, na_rep='nan', sep=';')
 
 def resume(args, dbinfo, modelFile):
     """ Loads model and optimizer state from a previous checkpoint. """

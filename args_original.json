@@ -1,4 +1,5 @@
 {
+  "data": "/gpfswork/rech/hnb/umt46nt/dataset",
   "--colorCode" : "colorCode",
   "sppComp": {
     "--knn_geofeatures": 100,
@@ -12,9 +13,7 @@
     "--format" : "laz",
 
     "--voxelize" : "none",
-    "--parallel" : "none",
-
-    "--colorCode" : "colorCode"
+    "--parallel" : "none"
   },
   "training": {
     "--wd" : 0,
@@ -46,8 +45,6 @@
     "--ptn_nfeat_stn" : 14,
 
     "--resume" : "none",
-    "--parallel" : "none",
-
-    "--colorCode" : "colorCode"
+    "--parallel" : "none"
   }
 }

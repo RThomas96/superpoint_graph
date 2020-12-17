@@ -63,7 +63,7 @@ def main(args):
     parser.add_argument('--outType', default='p', help='which cloud to output: s = superpoints, p = predictions, t = transitions (only for supervized partitions), g = geof, d = geof std, c = confidence, e = elevation')
     parser.add_argument('--filter_label', help='Output only SPP with a specific label')
     parser.add_argument('--format', default="laz", type=str, help='Format in which all clouds will be saved')
-    parser.add_argument('--specify_run', default=-1, type=str, help='Format in which all clouds will be saved')
+    parser.add_argument('--specify_run', default=-1, type=int, help='Format in which all clouds will be saved')
     parser.add_argument('--colorCode', default="colorCode", type=str, help='Format in which all clouds will be saved')
 
     args = parser.parse_args(args)

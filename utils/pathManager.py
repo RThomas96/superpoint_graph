@@ -6,8 +6,11 @@ from collections import defaultdict
 
 def mkdirIfNotExist(dir):
     if not os.path.isdir(dir): 
-        print("Create empty dir: " + dir)
-        os.mkdir(dir)
+        try:
+            print("Create empty dir: " + dir)
+            os.mkdir(dir)
+        except FileExistsError:
+            print("Error")#Probably in distributed mode
 
 class PathManager : 
     def __init__(self, projectName, sppCompRootPath = "", format = "laz"):

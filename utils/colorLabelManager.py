@@ -45,6 +45,7 @@ class ColorLabelManager:
                 for key in self.aggregationDict.keys():
                     for value in self.aggregationDict[key]:
                         reverse_dict[value+1] = int(key)
+                        newLabel2Color[value+1] = self.label2Color[int(key)]
 
                 for key, value in reverse_dict.items():
                     print(str(key) + " label is now " + str(value) + " label" )
