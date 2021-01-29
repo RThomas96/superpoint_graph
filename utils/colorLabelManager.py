@@ -23,6 +23,9 @@ class ColorLabelManager:
                         label2Color[i+1] = [values[1], values[2], values[3]]
                         label2Name[i+1] = values[7]
                         aggregationDict.setdefault(values[0],[]).append(i)
+
+                        #DEBUG
+                        self.file.append([values[0], values[7]])
                 return label2Color, label2Name, aggregationDict
 
         def aggregateLabels(self, labels):
@@ -48,6 +51,7 @@ class ColorLabelManager:
                     for value in self.aggregationDict[key]:
                         reverse_dict[value+1] = int(key)
                         newLabel2Color[value+1] = self.label2Color[int(key)]
+                        newLabel2Name[value+1] = self.label2Name[int(key)]
 
                 for key, value in reverse_dict.items():
                     print(str(key) + " label is now " + str(value) + " label" )

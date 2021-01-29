@@ -339,8 +339,9 @@ def fullTrainingLoop(args, pathManager, i):
             torch.save({'epoch': epoch + 1, 'args': args, 'state_dict': model.state_dict(), 'optimizer' : optimizer.state_dict(), 'scaler': scaler}, pathManager.getModelFile(i))
 
 
-    # 8. Final evaluation
-    if args.start_epoch < args.epochs and args.test_multisamp_n>0 and 'test' in args.db_test_name:
+    # 8. Final evaluation for model
+    #if args.start_epoch < args.epochs and args.test_multisamp_n>0 and 'test' in args.db_test_name:
+    if args.test_multisamp_n>0 and 'test' in args.db_test_name:
         acc_test, oacc_test, avg_iou_test, per_class_iou_test, predictions_test, avg_acc_test, confusion_matrix, rawPredictions = eval_final(model)
         with h5py.File(pathManager.getPredictionFile(i), 'w') as hf:
             for fname, o_cpu in predictions_test.items():

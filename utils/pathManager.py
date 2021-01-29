@@ -29,7 +29,7 @@ class PathManager :
 
         #SppComp
         self.sppCompReportPath = self.sppCompRootPath + "/reports/sppComputation"
-        self.voxelWidth = "0.03"
+        self.voxelWidth = "0.01"
         dataPath = self.sppCompRootPath + "/data/"
         self.allDataFileName = []
         self.allDataFileType = []

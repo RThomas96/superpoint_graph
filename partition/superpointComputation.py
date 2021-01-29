@@ -180,7 +180,10 @@ def fullPipeline(i, args, pathManager):
             print("Voxelisation step skipped")
             print("Read data file")
 
-        xyz, rgb, labels, objects = io.read_file(dataFile, dataType)
+        try:
+            xyz, rgb, labels, objects = io.read_file(dataFile, dataType)
+        except:
+            print("Can't read file: " + dataFile)
         if has_labels(labels, dataType):
             print("Labels found")
         else :
