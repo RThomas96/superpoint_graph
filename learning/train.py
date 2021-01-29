@@ -246,13 +246,18 @@ def fullTrainingLoop(args, pathManager, i):
     CLOSE =       '\x1b[0m'
     epoch = args.start_epoch
     best_iou = 0
+    best_save_iou = 0
 
     import custom_dataset
     dbinfo = custom_dataset.get_info(args)
     print("Read dataset")
     create_dataset = custom_dataset.get_datasets
 
-    classNames = list(ColorLabelManager(args.colorCode).label2Name.values())[1:] # Without "unknown"
+    classNames = []
+    print(list(ColorLabelManager(args.colorCode).label2Name.values())[1:])
+    for name in list(ColorLabelManager(args.colorCode).label2Name.values())[1:]:
+        if name not in classNames:
+            classNames.append(name)
 
     args.start_epoch = 0
     # Create model and optimizer
@@ -263,7 +268,7 @@ def fullTrainingLoop(args, pathManager, i):
         model = create_model(args, dbinfo)
         optimizer = create_optimizer(args, model)
 
-    train_dataset, test_dataset, valid_dataset, scaler = create_dataset(args, pathManager, 0)
+    train_dataset, test_dataset, valid_dataset, scaler = create_dataset(args, pathManager, i)
 
     print('RUN: ' + str(i))
     print('Train dataset: %i elements - Test dataset: %i elements - Validation dataset: %i elements' % (len(train_dataset),len(test_dataset),len(valid_dataset)))
