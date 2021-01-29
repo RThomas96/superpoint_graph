@@ -303,11 +303,23 @@ def fullTrainingLoop(args, pathManager, i):
             saveResult(epoch, loss_test, CM_test_pt, CM_test_spp, pathManager.getTrainingCsvReport("test", i))
             print(IOU_COLOR + 'IoU: %3.2f%%' % (CM_test_pt.getAvgIoU()*100) + CLOSE)
             print(TEST_COLOR + 'Test       -> loss: %1.4f,  acc pt: %3.2f%%,  acc spp: %3.2f%%,  avgIoU: %3.2f%%' % (loss_test, CM_test_pt.getAccuracy()*100, CM_test_spp.getAccuracy()*100, CM_test_pt.getAvgIoU()*100) + CLOSE)
+            isBest = CM_test_pt.getAvgIoU() > best_save_iou or epoch < 10
+            if isBest:
+                best_save_iou = CM_test_pt.getAvgIoU() 
+                torch.save({'epoch': epoch + 1, 'args': args, 'state_dict': model.state_dict(), 'optimizer' : optimizer.state_dict(), 'scaler': scaler}, pathManager.getBestModelFile(i))
+
+            # DEBUG
+            acc_pt, avg_iou, avg_prec, avg_rec, iou_per_class, prec_per_class, rec_per_class = CM_test_pt.getStats()
+            if np.isnan(iou_per_class).any() :
+                float_formatter = "{:.2f}".format
+                np.set_printoptions(formatter={'float_kind':float_formatter})
+                print("NAN DETECTED, PRINT CM FOR RUN " + str(i))
+                print(CM_test_pt.confusionMatrix)
 
         if firstEpoch or isEvalValEpoch:
             loss_val, CM_val_pt, CM_val_spp = eval(model, True)
             if args.only_best:
-                isBest = CM_val_pt.getAvgIoU() > best_iou or epoch < 5
+                isBest = CM_val_pt.getAvgIoU() > best_iou or epoch < 10
                 if isBest:
                     print(BEST_COLOR + 'New best model achieved!' + CLOSE)
                     best_iou = CM_val_pt.getAvgIoU() 
@@ -339,6 +351,13 @@ def fullTrainingLoop(args, pathManager, i):
                 hf.create_dataset(name=fname, data=o_cpu) #(0-based classes)
 
         print('-> Multisample {}: Test accuracy: {}, \tTest oAcc: {}, \tTest avgIoU: {}, \tTest mAcc: {}'.format(args.test_multisamp_n, acc_test, oacc_test, avg_iou_test, avg_acc_test))
+
+    # 8 bis. Final evaluation for best model
+    model, optimizer = resume(args, dbinfo, pathManager.getBestModelFile(i))
+    acc_test, oacc_test, avg_iou_test, per_class_iou_test, predictions_test, avg_acc_test, confusion_matrix, rawPredictions = eval_final(model)
+    with h5py.File(pathManager.getBestPredictionFile(i), 'w') as hf:
+        for fname, o_cpu in predictions_test.items():
+            hf.create_dataset(name=fname, data=o_cpu) #(0-based classes)
 
 
 def main(args):

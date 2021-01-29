@@ -61,11 +61,17 @@ class PathManager :
                     for file in files:
                         self.allDataDataset[-1][dataset].append(file)
 
+    def getBestModelFile(self, i):
+        return self.trainingRootPath + "/results/" + str(i) + "/best_model.pth.h5"
+
     def getModelFile(self, i):
         return self.trainingRootPath + "/results/" + str(i) + "/model.pth.h5"
 
     def getPredictionFile(self, i):
         return self.trainingRootPath + "/results/" + str(i) + "/predictions.h5"
+
+    def getBestPredictionFile(self, i):
+        return self.trainingRootPath + "/results/" + str(i) + "/best_predictions.h5"
 
     def getRawPredictionFile(self, i):
         return self.trainingRootPath + "/results/" + str(i) + "/rawPredictions.h5"
@@ -104,8 +110,9 @@ class PathManager :
         stdFile   = self.sppCompRootPath + "/visualisation/features/" + fileName  + "_std." + self.outFormat
         confidencePredictionFile   = self.trainingRootPath + "/visualisation/features/" + fileName + "_" + str(runIndex) + "_conf." + self.outFormat
         elevationFile   = self.sppCompRootPath + "/visualisation/features/" + fileName  + "_elevation." + self.outFormat
+        confusionMatrixFile = self.trainingRootPath + "/visualisation/features/" + fileName  + "_" + str(runIndex) + "_confusionMatrix.txt"
 
-        return sppFile, predictionFile, transFile, geofFile, stdFile, confidencePredictionFile, elevationFile
+        return sppFile, predictionFile, transFile, geofFile, stdFile, confidencePredictionFile, elevationFile, confusionMatrixFile
 
     def getNbFiles(self):
         return len(self.allDataFileName)
