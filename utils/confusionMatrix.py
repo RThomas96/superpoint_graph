@@ -70,18 +70,22 @@ class ConfusionMatrix:
     def getPrecisionPerClass(self): 
         all = self.getTruePositivPerClass() + self.getFalsePositivPerClass()
         res = (self.getTruePositivPerClass() / all)
+        res[self.getNotUseClass()] = np.nan
         return self.removeNanForUsedClass(res)
 
     # recall = tp / (tp + fn)
     def getRecallPerClass(self): 
         all = self.getTruePositivPerClass() + self.getFalseNegativPerClass()
         res = (self.getTruePositivPerClass() / all)
+        res[self.getNotUseClass()] = np.nan
         return self.removeNanForUsedClass(res)
 
     # iou = tp / (tp + fp + fn)
     def getIoUPerClass(self):
         all = self.getTruePositivPerClass() + self.getFalsePositivPerClass() + self.getFalseNegativPerClass()
-        return [float(val) / all[i] for i, val in enumerate(self.getTruePositivPerClass()) ]
+        res = np.array([float(val) / all[i] for i, val in enumerate(self.getTruePositivPerClass())])
+        res[self.getNotUseClass()] = np.nan
+        return self.removeNanForUsedClass(res) 
 
     def getAvgIoU(self):
         #from pudb import set_trace; set_trace()
@@ -108,15 +112,13 @@ class ConfusionMatrix:
     # Return classes without any prediction or ground truth
     def getNotUseClass(self):
         row = np.array(self.confusionMatrix).sum(axis=1)
-        column = np.array(self.confusionMatrix).sum(axis=0)
-        add = row + column
-        return np.where(add == 0)[0]
+        #column = np.array(self.confusionMatrix).sum(axis=0)
+        #add = row + column
+        return np.where(row == 0)[0]
 
     def getUsedClass(self):
         row = np.array(self.confusionMatrix).sum(axis=1)
-        column = np.array(self.confusionMatrix).sum(axis=0) 
-        add = row + column
-        return np.where(add != 0)[0]
+        return np.where(row != 0)[0]
 
     def removeNanForUsedClass(self, vec):
         for i in self.getUsedClass():
