@@ -381,7 +381,7 @@ def main(args):
     parser.add_argument('--batch_size', default=3, type=int, help='Batch size')
     parser.add_argument('--optim', default='adam', help='Optimizer: sgd|adam')
     parser.add_argument('--grad_clip', default=1, type=float, help='Element-wise clipping of gradient. If 0, does not clip')
-    parser.add_argument('--loss_weights', default='proportional', help='[equal, proportional, sqrt] how to weight the loss function')
+    parser.add_argument('--loss_weights', default='proportional', help='[equal, proportional, custom] how to weight the loss function')
 
     # Learning process arguments
     parser.add_argument('--cuda', default=1, type=int, help='Bool, use cuda')

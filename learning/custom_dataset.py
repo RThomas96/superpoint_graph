@@ -23,6 +23,7 @@ import torchnet as tnt
 import h5py
 import spg
 from sklearn.linear_model import RANSACRegressor
+import json
 
 import sys
 sys.path.append("./utils")
@@ -83,28 +84,27 @@ def get_info(args):
         loss = args.loss_weight
 
     if loss == 'equal':
+        print("Loss weights all equal")
         weights = np.ones((colors.nbColor,),dtype='f4')
-        weights = torch.from_numpy(weights).cuda() if args.cuda else torch.from_numpy(weights)
+    elif loss == 'proportional':
+        print("Proportional loss weights not implemented yet !")
+        print("Loss weights all equal")
+        weights = np.ones((colors.nbColor,),dtype='f4')
     else:
-        print("Hard coded loss weights !")
+
+        try:
+            weights = np.array(json.loads(loss))
+        except json.decoder.JSONDecodeError:
+            print("Weights format not valid")
+            print("Loss weights all equal")
+            weights = np.ones((colors.nbColor,),dtype='f4')
+        
         #weights = np.array([0.69422756, 0.84267807, 0.56590259, 0.99259166, 0.99582052, 0.99747999, 0.99924599, 0.99910761, 0.98240414, 0.9561125,  0.98127003], dtype='f4') # Weights on points
-        weights = np.array([0.74550129, 0.81159779, 0.61670704, 0.98157257, 0.98767797, 0.99452492, 0.99897419, 0.99616868, 0.97169765, 0.9522197,  0.97037522], dtype='f4')  # Weight on spp for regStrength 0.05
-        if colors.needAggregation:
-            newWeight = np.ones(colors.nbColor)
-            if colors.nbColor >= 3:
-                newWeight[0] = 0.74550129
-                newWeight[1] = 0.81159779 
-                newWeight[2] = 0.61670704 
-            #for key, value in colors.aggregationDict.items():
-            #    if int(key) != 0:
-            #        newWeight[int(key)-1] += weights[int(value)-1]
-            weights = np.array(newWeight, dtype='f4')
+        #weights = np.array([0.74550129, 0.81159779, 0.61670704, 0.98157257, 0.98767797, 0.99452492, 0.99897419, 0.99616868, 0.97169765, 0.9522197,  0.97037522], dtype='f4')  # Weight on spp for regStrength 0.05
 
-        #weights = np.array([0.74550129, 0.81159779, 0.61670704, 1, 1], dtype='f4')  # Weight on spp for regStrength 0.05
+        print("Custom loss weights : " + str(weights))
 
-        #print("Loss weights not implemented yet !")
-        #weights = np.ones((colors.nbColor,),dtype='f4')
-        weights = torch.from_numpy(weights).cuda() if args.cuda else torch.from_numpy(weights)
+    weights = torch.from_numpy(weights).cuda() if args.cuda else torch.from_numpy(weights)
     return {
         'node_feats': 11 if args.pc_attribs=='' else len(args.pc_attribs),
         'edge_feats': edge_feats,
