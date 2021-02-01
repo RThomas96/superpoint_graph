@@ -289,9 +289,6 @@ def fullTrainingLoop(args, pathManager, i):
         print('#################')
         print('Epoch {}/{} ({}):'.format(epoch, args.epochs, args.ROOT_PATH))
 
-        " Update tensor if grad is computed "
-        scheduler.step() 
-
         isEvalValEpoch = (epoch % args.eval_valid_nth_epoch == 0)
         isEvalTestEpoch = (epoch % args.eval_test_nth_epoch == 0)
         isSaveEpoch = (epoch % args.save_nth_epoch == 0)
@@ -337,6 +334,8 @@ def fullTrainingLoop(args, pathManager, i):
         if isSaveEpoch and not args.only_best:
             torch.save({'epoch': epoch + 1, 'args': args, 'state_dict': model.state_dict(), 'optimizer' : optimizer.state_dict(), 'scaler': scaler}, pathManager.getModelFile(i))
 
+        # Update scheduler
+        scheduler.step() 
 
     # 8. Final evaluation for model
     #if args.start_epoch < args.epochs and args.test_multisamp_n>0 and 'test' in args.db_test_name:
