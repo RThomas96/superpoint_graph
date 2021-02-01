@@ -2,8 +2,6 @@ import os
 
 class ColorLabelManager:
         def __init__(self, file="colorCode"):
-                #DEBUG
-                self.file = []
                 #self.filePath = "/home/thomas/Data/Cajun/Data/Evaluation/Methods/superpoint_graph/utils/colorCode" 
                 self.filePath = os.path.dirname(os.path.realpath(__file__)) + '/../utils/' + file
                 self.label2Color, self.label2Name, self.aggregationDict = self.parseColorFile()
@@ -23,9 +21,6 @@ class ColorLabelManager:
                         label2Color[i+1] = [values[1], values[2], values[3]]
                         label2Name[i+1] = values[7]
                         aggregationDict.setdefault(values[0],[]).append(i)
-
-                        #DEBUG
-                        self.file.append([values[0], values[7]])
                 return label2Color, label2Name, aggregationDict
 
         def aggregateLabels(self, labels):

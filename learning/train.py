@@ -21,7 +21,6 @@ from tqdm import tqdm
 import logging
 from collections import defaultdict
 import h5py
-import cloudIO as io
 #from IPython.core.debugger import set_trace
 import torch.multiprocessing as multiprocessing
 multiprocessing.set_start_method('spawn', force=True)
@@ -44,6 +43,7 @@ from learning import metrics
 
 sys.path.append("./utils")
 
+import cloudIO as io
 from colorLabelManager import ColorLabelManager
 from pathManager import PathManager
 from confusionMatrix import ConfusionMatrix
@@ -259,6 +259,13 @@ def fullTrainingLoop(args, pathManager, i):
         if name not in classNames:
             classNames.append(name)
 
+    # Automatic update model config argument
+    nbLabel = ColorLabelManager(args.colorCode).nbColor
+    import re
+    if re.search('f_[0-9]*', args.model_config).group(0) != str(nbLabel):
+        print("Warning: model config not compatible\nNew config: " + "f_" + str(nbLabel)) 
+        args.model_config = args.model_config.replace(re.search('f_[0-9]*', args.model_config).group(0), "f_" + str(nbLabel))
+
     args.start_epoch = 0
     # Create model and optimizer
     if args.resume and os.path.isfile(pathManager.getModelFile(i)):
@@ -307,14 +314,6 @@ def fullTrainingLoop(args, pathManager, i):
             if isBest:
                 best_save_iou = CM_test_pt.getAvgIoU() 
                 torch.save({'epoch': epoch + 1, 'args': args, 'state_dict': model.state_dict(), 'optimizer' : optimizer.state_dict(), 'scaler': scaler}, pathManager.getBestModelFile(i))
-
-            # DEBUG
-            acc_pt, avg_iou, avg_prec, avg_rec, iou_per_class, prec_per_class, rec_per_class = CM_test_pt.getStats()
-            if np.isnan(iou_per_class).any() :
-                float_formatter = "{:.2f}".format
-                np.set_printoptions(formatter={'float_kind':float_formatter})
-                print("NAN DETECTED, PRINT CM FOR RUN " + str(i))
-                print(CM_test_pt.confusionMatrix)
 
         if firstEpoch or isEvalValEpoch:
             loss_val, CM_val_pt, CM_val_spp = eval(model, True)
